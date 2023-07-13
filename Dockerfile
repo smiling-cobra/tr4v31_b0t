@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . /app
 
 # Set the default command to run when the container starts
-CMD [ "python", "your_script.py" ]
+CMD [ "python", "./main.py" ]
