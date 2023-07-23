@@ -1,10 +1,10 @@
 from typing import Final
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import os
 
-# Variables
-TOKEN: Final = '6345267221:AAFet0KvhH9xhFhBLP4BP5pifGfUxoBmxew'
-BOT_USERNAME:Final = '@tr4v3lb0t'
+telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
+bot_username = os.environ.get('BOT_USERNAME')
 
 # Commands
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -17,17 +17,16 @@ async def custom_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('This is a custom command!')    
 
 # Responses
-def handle_response(text: str) -> str:
-    processed: str = text.lower()
+def handle_response(message: str) -> str:
+    message_to_lowercase: str = message.lower()
 
-
-    if 'hello' in processed:
+    if 'hello' in message_to_lowercase:
         return 'Hey there!'
     
-    if 'how are you' in processed:
+    if 'how are you' in message_to_lowercase:
         return 'I am good!'
     
-    if 'i love python' in processed:
+    if 'i love python' in message_to_lowercase:
         return 'Don`t forget to subscribe!'
     
     return 'Please, clarify your question.'
@@ -38,7 +37,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
  
     print(f'User({update.message.chat.id}) in {message_type} : "{text}"')
     
-    # This block is to handle cases when you mention [travel_bot] directly in group chat.
+    # This block is to handle cases when you want to mention [travel_bot] directly in group chat.
     if message_type == 'group':
         if BOT_USERNAME in text:
             new_text: str = text.replace(BOT_USERNAME, '').strip()
@@ -58,7 +57,7 @@ async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Run the program
 if __name__ == '__main__':
     print('Starting bot...')
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(telegram_bot_token).build()
 
     # Commands
     app.add_handler(CommandHandler('start', start_command))
