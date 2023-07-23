@@ -8,10 +8,10 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install the Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Copy the current directory into the container at /app
 COPY . /app
 
 # Set the default command to run when the container starts
-CMD [ "python", "./main.py" ]
+CMD ["python", "main.py"]

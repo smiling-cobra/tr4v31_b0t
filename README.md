@@ -12,3 +12,5 @@ Once the image is built, you can run it in a container using the following comma
     docker run -it --rm tr4v31_b0t
 
 This command starts a new Docker container based on the image you built. The -it option enables an interactive session within the container, and --rm removes the container automatically after it exits.
+
+    docker run --name tr4v31_b0t tr4v31_b0t
