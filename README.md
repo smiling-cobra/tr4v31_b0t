@@ -1,2 +1,6 @@
 # tr4v31_b0t
-    docker-compose -d to run the app
+### Build container from image
+    docker build -t tr4v31_b0t-telegram_bot .
+
+### Run container
+    docker-compose -up

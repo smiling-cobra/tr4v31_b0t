@@ -16,7 +16,7 @@ WELCOME_MESSAGE_LONG = '''
 '''
 
 WELCOME_MESSAGE_CONCISE = '''
-🌍 Welcome to TravelBot! 🚀
+🌍 Welcome to TravelBot, {}! 🚀
 
 🛩️ Tell me your destination city, and I'll be your travel companion, providing valuable tips and insights for your trip!
 
@@ -27,5 +27,4 @@ WELCOME_MESSAGE_CONCISE = '''
 🙌 Happy travels! For assistance, just type /help anytime.
 '''
 
-# Other static messages
 # Add more messages here as needed...
