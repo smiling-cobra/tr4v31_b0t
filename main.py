@@ -12,21 +12,22 @@ geocoding_api_url = os.environ.get('GEOCODING_API_URL')
 # Define states for the conversation
 DESTINATION, LOBBY = range(2)
 
-def get_city(city_name: str, google_api_key: str, geocoding_api_url: str):
+def fetch_city_data(city_name: str, google_api_key: str, geocoding_api_url: str):
     req_params = {
         "address": city_name,
         "key": google_api_key
     }
 
     response = requests.get(geocoding_api_url, params=req_params)
-    
+
     try:
         data = response.json()
     except ValueError as e:
         return f"Error parsing JSON: {e}"
 
     if data.get('status') == 'OK':
-        return data
+        context.user_data['city_data'] = data['results']
+        return data['results']
     else:
         return f"No city was found! Status: {data.get('status')}"
 
@@ -35,14 +36,17 @@ def start(update: Update, context: CallbackContext):
     user_name = update.message.chat.first_name
     welcome_message = WELCOME_MESSAGE_CONCISE.format(user_name)
     update.message.reply_text(welcome_message)
+
     return DESTINATION
 
 # Function to handle the user's destination input
-def get_destination(update: Update, context: CallbackContext):
+def handle_user_input(update: Update, context: CallbackContext):
     user_input = update.message.text
-    get_city(user_input, google_map_api_key, geocoding_api_url)
+    fetch_city_data(user_input, google_map_api_key, geocoding_api_url)
+
     update.message.reply_text(f"Great! You're traveling to {user_input}. How can I assist you further?",
     reply_markup=get_lobby_keyboard())
+    
     return LOBBY
 
 # Messages
@@ -78,26 +82,13 @@ def get_lobby_keyboard():
     # Return the ReplyKeyboardMarkup with the lobby keyboard
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
-# Responses
-def handle_response(message: str) -> str:
-    message_to_lowercase: str = message.lower()
-
-    print('message:', message)
-
-    if 'hello' in message_to_lowercase:
-        return 'Hey there!'
-    
-    if 'how are you' in message_to_lowercase:
-        return 'I am good!'
-    
-    if 'i love python' in message_to_lowercase:
-        return 'Don`t forget to subscribe!'
-    
-    return 'Please, clarify your question.'
-
 # Function to handle user's choice in the lobby
-def handle_lobby_choice(update, context):
+def handle_lobby_choice(update: Update, context: CallbackContext):
+    # Create separate service/layer for processing user choice.
+    
+    print('context:', context)
     user_choice = update.message.text
+
     # Handle the user's choice based on the selected option
     if user_choice == 'Tourist Attractions':
         # Your code to provide tourist attractions
@@ -114,6 +105,11 @@ def handle_lobby_choice(update, context):
     elif user_choice == 'Travel Tips':
         # Your code to provide travel tips
         update.message.reply_text("Here are some travel tips for your destination:")
+    elif user_choice == '5 Facts':
+        # Your code to provide help or instructions
+        update.message.reply_text("Here are some facts about your destination:")
+    elif user_choice == 'Exit':
+        cancel(update, context)
     elif user_choice == 'Help':
         # Your code to provide help or instructions
         update.message.reply_text("How can I assist you?")
@@ -140,7 +136,7 @@ def main() -> None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            DESTINATION: [MessageHandler(Filters.text & ~Filters.command, get_destination)],
+            DESTINATION: [MessageHandler(Filters.text & ~Filters.command, handle_user_input)],
             LOBBY: [MessageHandler(Filters.text & ~Filters.command, handle_lobby_choice)]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
