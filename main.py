@@ -7,9 +7,28 @@ from messages import WELCOME_MESSAGE_LONG, WELCOME_MESSAGE_CONCISE
 telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
 bot_username = os.environ.get('BOT_USERNAME')
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
+geocoding_api_url = os.environ.get('GEOCODING_API_URL')
 
 # Define states for the conversation
 DESTINATION, LOBBY = range(2)
+
+def get_city(city_name: str, google_api_key: str, geocoding_api_url: str):
+    req_params = {
+        "address": city_name,
+        "key": google_api_key
+    }
+
+    response = requests.get(geocoding_api_url, params=req_params)
+    
+    try:
+        data = response.json()
+    except ValueError as e:
+        return f"Error parsing JSON: {e}"
+
+    if data.get('status') == 'OK':
+        return data
+    else:
+        return f"No city was found! Status: {data.get('status')}"
 
 # Handlers
 def start(update: Update, context: CallbackContext):
@@ -18,16 +37,10 @@ def start(update: Update, context: CallbackContext):
     update.message.reply_text(welcome_message)
     return DESTINATION
 
-# def help_command(update: Update, context: CallbackContext):
-#     update.message.reply_text('I`m your travel assistant. Please, type something so I can respond!')
-
-# def custom_command(update: Update, context: CallbackContext):
-#     update.message.reply_text('This is a custom command!')
-
 # Function to handle the user's destination input
 def get_destination(update: Update, context: CallbackContext):
     user_input = update.message.text
-    # Add destination validation via Google Maps Geocoding API
+    get_city(user_input, google_map_api_key, geocoding_api_url)
     update.message.reply_text(f"Great! You're traveling to {user_input}. How can I assist you further?",
     reply_markup=get_lobby_keyboard())
     return LOBBY
@@ -109,7 +122,7 @@ def handle_lobby_choice(update, context):
 def cancel(update: Update, context: CallbackContext):
     user_name = update.message.chat.first_name
     update.message.reply_text(f"Have a nice trip, {user_name}! Feel free to reach out again anytime!")
-    reply_markup=ReplyKeyboardRemove()
+    # reply_markup=ReplyKeyboardRemove()
     return ConversationHandler.END
 
 # Log errors
