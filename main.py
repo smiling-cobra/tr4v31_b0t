@@ -3,16 +3,25 @@ import requests
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from messages import WELCOME_MESSAGE_LONG, WELCOME_MESSAGE_CONCISE
+from command import TouristAttractionsCommand, WeatherForecastCommand, AffordableEatsCommand, LocalPhrasesCommand, TravelTipsCommand, FiveFactsCommand, HelpCommand
 
 telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
 bot_username = os.environ.get('BOT_USERNAME')
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 geocoding_api_url = os.environ.get('GEOCODING_API_URL')
 
+TOURIST_ATTRACTIONS = 'Tourist Attractions'
+WEATHER_FORECAST = 'Weather Forecast'
+AFFORDABLE_EATS = 'Affordable Eats'
+LOCAL_PHRASES = 'Local Phrases'
+TRAVEL_TIPS = 'Travel Tips'
+FIVE_FACTS = '5 Facts'
+HELP = 'Help'
+
 # Define states for the conversation
 DESTINATION, LOBBY = range(2)
 
-def fetch_city_data(city_name: str, google_api_key: str, geocoding_api_url: str):
+def fetch_city_data(city_name: str, google_api_key: str, geocoding_api_url: str, context: CallbackContext):
     req_params = {
         "address": city_name,
         "key": google_api_key
@@ -42,7 +51,7 @@ def start(update: Update, context: CallbackContext):
 # Function to handle the user's destination input
 def handle_user_input(update: Update, context: CallbackContext):
     user_input = update.message.text
-    fetch_city_data(user_input, google_map_api_key, geocoding_api_url)
+    fetch_city_data(user_input, google_map_api_key, geocoding_api_url, context)
 
     update.message.reply_text(f"Great! You're traveling to {user_input}. How can I assist you further?",
     reply_markup=get_lobby_keyboard())
@@ -73,52 +82,41 @@ def handle_message(update: Update, context: CallbackContext):
 def get_lobby_keyboard():
     # Define the options in the lobby
     options = [
-        ['5 Facts', 'Tourist Attractions', 'Weather Forecast'],
-        ['Affordable Eats', 'Local Phrases'],
-        ['Travel Tips', 'Help', 'Exit']
+        [TOURIST_ATTRACTIONS, WEATHER_FORECAST, AFFORDABLE_EATS],
+        [LOCAL_PHRASES, TRAVEL_TIPS, FIVE_FACTS],
+        [HELP]
     ]
     # Create a list of KeyboardButton objects for each row of options
     keyboard = [[KeyboardButton(option) for option in row] for row in options]
     # Return the ReplyKeyboardMarkup with the lobby keyboard
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
+user_choice_to_command = {
+    TOURIST_ATTRACTIONS: TouristAttractionsCommand(),
+    WEATHER_FORECAST: WeatherForecastCommand(),
+    AFFORDABLE_EATS: AffordableEatsCommand(),
+    LOCAL_PHRASES: LocalPhrasesCommand(),
+    TRAVEL_TIPS: TravelTipsCommand(),
+    FIVE_FACTS: FiveFactsCommand(),
+    HELP: HelpCommand()
+}
+
 # Function to handle user's choice in the lobby
 def handle_lobby_choice(update: Update, context: CallbackContext):
-    # Create separate service/layer for processing user choice.
-    
     print('context:', context)
     user_choice = update.message.text
+    command = user_choice_to_command.get(user_choice)
 
-    # Handle the user's choice based on the selected option
-    if user_choice == 'Tourist Attractions':
-        # Your code to provide tourist attractions
-        update.message.reply_text("Here are some popular tourist attractions in your destination:")
-    elif user_choice == 'Weather Forecast':
-        # Your code to provide weather forecast
-        update.message.reply_text("Here's the weather forecast for your destination:")
-    elif user_choice == 'Affordable Eats':
-        # Your code to provide affordable eating options
-        update.message.reply_text("Here are some affordable places to eat in your destination:")
-    elif user_choice == 'Local Phrases':
-        # Your code to provide local phrases
-        update.message.reply_text("Here are some useful local phrases:")
-    elif user_choice == 'Travel Tips':
-        # Your code to provide travel tips
-        update.message.reply_text("Here are some travel tips for your destination:")
-    elif user_choice == '5 Facts':
-        # Your code to provide help or instructions
-        update.message.reply_text("Here are some facts about your destination:")
-    elif user_choice == 'Exit':
-        cancel(update, context)
-    elif user_choice == 'Help':
-        # Your code to provide help or instructions
-        update.message.reply_text("How can I assist you?")
+    if command:
+        command.execute(update, context)
+    else:
+        update.message.reply_text("Invalid choice. Please choose a valid option.")
+
 
 # Function to handle the '/cancel' command and end the conversation
 def cancel(update: Update, context: CallbackContext):
     user_name = update.message.chat.first_name
     update.message.reply_text(f"Have a nice trip, {user_name}! Feel free to reach out again anytime!")
-    # reply_markup=ReplyKeyboardRemove()
     return ConversationHandler.END
 
 # Log errors
