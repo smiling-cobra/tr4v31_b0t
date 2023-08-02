@@ -103,7 +103,6 @@ user_choice_to_command = {
 
 # Function to handle user's choice in the lobby
 def handle_lobby_choice(update: Update, context: CallbackContext):
-    print('context:', context)
     user_choice = update.message.text
     command = user_choice_to_command.get(user_choice)
 

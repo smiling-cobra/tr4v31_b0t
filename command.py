@@ -1,6 +1,14 @@
 from abc import ABC, abstractmethod
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+import logging
+
+# # Configure the logging settings
+# logging.basicConfig(
+#     level=logging.DEBUG,  # Set the logging level to DEBUG (you can use INFO, WARNING, ERROR, etc.)
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     datefmt='%Y-%m-%d %H:%M:%S'
+# )
 
 class Command(ABC):
     @abstractmethod
@@ -9,8 +17,10 @@ class Command(ABC):
 
 class TouristAttractionsCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
-        # Your code to provide tourist attractions
-        update.message.reply_text("Here are some popular tourist attractions in your destination:")
+        city_data = context.user_data.get('city_data')[0]
+        address_components = city_data.get('address_components')[0]
+        city_name = address_components.get('long_name')
+        update.message.reply_text(f"Here are some popular tourist attractions in {city_name}:")
         pass
 
 class WeatherForecastCommand(Command):
