@@ -25,9 +25,10 @@ class Command(ABC):
 class TouristAttractionsCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
         city_name = self.get_city_name(context)
-        tourist_attractions = self.get_tourist_attractions(city_name)
-        print(tourist_attractions)
+        landmarks = self.get_landmarks(city_name)
+        context.user_data['landmarks'] = landmarks['results']
         update.message.reply_text(f"Here are some popular tourist attractions in {city_name}:")
+        self.post_landmarks(update, context, landmarks)
         pass
     
     def get_city_name(self, context: CallbackContext) -> str:
@@ -36,7 +37,7 @@ class TouristAttractionsCommand(Command):
         city_name = address_components.get('long_name')
         return city_name
     
-    def get_tourist_attractions(self, city_name: str) -> list:
+    def get_landmarks(self, city_name: str) -> list:
         # Your code to get tourist attractions
         version = date.today().strftime("%Y%m%d")
 
@@ -45,20 +46,33 @@ class TouristAttractionsCommand(Command):
             'client_secret': client_secret,
             'v': version,
             'near': city_name,
-            'query': 'tourist_attraction',
-            'limit': 5
+            'query': 'landmarks',
+            'limit': 5,
+            'fields' :'name,location'
         }
 
-        # Usage of the V2 Places API has been deprecated for new Projects
-        # https://docs.foursquare.com/reference
-        response = requests.get(base_url, params=params)
+        headers = {
+            "accept": "application/json",
+            "Authorization": "fsq3EspygHQ4vVEBDjCoZ/j/Jz23u08mtTLHp66gpA0idio="
+        }
+
+        response = requests.get(base_url, params=params, headers=headers)
 
         if response.status_code == 200:
-            data = response.json()
-            venues = data.get('response').get('venues')
-            return venues
+            data_list = response.json()
+            return data_list
         else:
             return []
+
+    def post_landmarks(self, update: Update, context: CallbackContext, landmarks: list) -> None:
+        city_landmarks = landmarks.get('results')
+        for landmark in city_landmarks:
+            landmark_name = landmark.get('name')
+            landmark_location = landmark.get('location').get('formatted_address')
+            message_text = f"{landmark_name}\n{landmark_location}"
+            update.message.reply_text(message_text)
+        pass    
+    
 
 class WeatherForecastCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
