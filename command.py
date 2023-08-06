@@ -1,9 +1,10 @@
 import os
+import html
 import logging
 import requests
 from datetime import date
 from abc import ABC, abstractmethod
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 
 # # Configure the logging settings
@@ -16,8 +17,6 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Callb
 client_id = os.environ.get('FOURSQUARE_CLIENT_ID')
 client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
 base_url = os.environ.get('FOURSQSARE_API_URL')
-
-DESTINATION, LOBBY = range(2)
 
 class Command(ABC):
     @abstractmethod
@@ -32,6 +31,10 @@ class TouristAttractionsCommand(Command):
 
         update.message.reply_text(f"Here are some popular tourist attractions in {city_name}:", reply_markup=self.get_landmark_keyboard())
         self.post_landmarks(update, context, landmarks)
+    
+    def format_address_as_link(self, address: str):
+        google_maps_link = f'https://www.google.com/maps/search/?api=1&query={html.escape(address)}'
+        return f'<a href="{google_maps_link}">{html.escape(address)}</a>'
     
     def get_landmark_keyboard(self) -> InlineKeyboardMarkup:
         # Return the InlineKeyboardMarkup with the "Back to Lobby" button
@@ -78,8 +81,9 @@ class TouristAttractionsCommand(Command):
         for landmark in city_landmarks:
             landmark_name = landmark.get('name')
             landmark_location = landmark.get('location').get('formatted_address')
-            message_text = f"{landmark_name}\n{landmark_location}"
-            update.message.reply_text(message_text)
+            landmark_location_as_link = self.format_address_as_link(landmark_location)
+            message_text = f"{landmark_name}\n{landmark_location_as_link}"
+            update.message.reply_text(message_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
         pass
     
 
