@@ -3,7 +3,7 @@ import logging
 import requests
 from datetime import date
 from abc import ABC, abstractmethod
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 
 # # Configure the logging settings
@@ -17,6 +17,8 @@ client_id = os.environ.get('FOURSQUARE_CLIENT_ID')
 client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
 base_url = os.environ.get('FOURSQSARE_API_URL')
 
+DESTINATION, LOBBY = range(2)
+
 class Command(ABC):
     @abstractmethod
     def execute(self, update: Update, context: CallbackContext) -> None:
@@ -27,9 +29,16 @@ class TouristAttractionsCommand(Command):
         city_name = self.get_city_name(context)
         landmarks = self.get_landmarks(city_name)
         context.user_data['landmarks'] = landmarks['results']
-        update.message.reply_text(f"Here are some popular tourist attractions in {city_name}:")
+
+        update.message.reply_text(f"Here are some popular tourist attractions in {city_name}:", reply_markup=self.get_landmark_keyboard())
         self.post_landmarks(update, context, landmarks)
-        pass
+    
+    def get_landmark_keyboard(self) -> InlineKeyboardMarkup:
+        # Return the InlineKeyboardMarkup with the "Back to Lobby" button
+        back_to_lobby_button = KeyboardButton("Back")
+        more_landmarks_button = KeyboardButton("Show me more landmarks!")
+        keyboard = [[back_to_lobby_button], [more_landmarks_button]]
+        return ReplyKeyboardMarkup(keyboard)
     
     def get_city_name(self, context: CallbackContext) -> str:
         city_data = context.user_data.get('city_data')[0]
@@ -71,7 +80,7 @@ class TouristAttractionsCommand(Command):
             landmark_location = landmark.get('location').get('formatted_address')
             message_text = f"{landmark_name}\n{landmark_location}"
             update.message.reply_text(message_text)
-        pass    
+        pass
     
 
 class WeatherForecastCommand(Command):

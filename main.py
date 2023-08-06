@@ -17,6 +17,7 @@ LOCAL_PHRASES = 'Local Phrases'
 TRAVEL_TIPS = 'Travel Tips'
 FIVE_FACTS = '5 Facts'
 HELP = 'Help'
+BACK = 'Back'
 
 # Define states for the conversation
 DESTINATION, LOBBY = range(2)
@@ -105,6 +106,10 @@ user_choice_to_command = {
 def handle_lobby_choice(update: Update, context: CallbackContext):
     user_choice = update.message.text
     command = user_choice_to_command.get(user_choice)
+
+    if user_choice == BACK:
+        update.message.reply_text("What else can I help you with?", reply_markup=get_lobby_keyboard())
+        return LOBBY
 
     if command:
         command.execute(update, context)
