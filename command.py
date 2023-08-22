@@ -28,7 +28,6 @@ class TouristAttractionsCommand(Command):
         city_name = self.get_city_name(context)
         landmarks = self.get_landmarks(city_name)
         context.user_data['landmarks'] = landmarks['results']
-
         update.message.reply_text(f"Here are some popular tourist attractions in {city_name}:", reply_markup=self.get_landmark_keyboard())
         self.post_landmarks(update, context, landmarks)
     
@@ -50,7 +49,6 @@ class TouristAttractionsCommand(Command):
         return city_name
     
     def get_landmarks(self, city_name: str) -> list:
-        # Your code to get tourist attractions
         version = date.today().strftime("%Y%m%d")
 
         params = {
@@ -87,16 +85,63 @@ class TouristAttractionsCommand(Command):
         pass
     
 
-class WeatherForecastCommand(Command):
-    def execute(self, update: Update, context: CallbackContext) -> None:
-        # Your code to provide weather forecast
-        update.message.reply_text("Here's the weather forecast for your destination:")
-        pass
-
 class AffordableEatsCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
-        # Your code to provide affordable eating options
-        update.message.reply_text("Here are some affordable places to eat in your destination:")
+        city_name = self.get_city_name(context)
+        restaurants = self.get_restauraunts(city_name)
+        context.user_data['affordable_eats'] = restaurants['results']
+        update.message.reply_text(f"Here are some affordable places to eat in {city_name}, sorted by rating:", reply_markup=self.get_affordable_eats_keyboard(context))
+        self.post_restauraunts(update, context, restaurants)
+    
+    def format_address_as_link(self, address: str):
+        google_maps_link = f'https://www.google.com/maps/search/?api=1&query={html.escape(address)}'
+        return f'<a href="{google_maps_link}">{html.escape(address)}</a>'
+    
+    def get_affordable_eats_keyboard(self, context: CallbackContext) -> InlineKeyboardMarkup:
+        city_name = self.get_city_name(context)
+        back_to_lobby_button = KeyboardButton("Back")
+        more_restauraunts_button = KeyboardButton(f"Show me more restaurants in {city_name}!")
+        keyboard = [[back_to_lobby_button], [more_restauraunts_button]]
+        return ReplyKeyboardMarkup(keyboard)
+    
+    def get_restauraunts(self, city_name: str) -> list:
+        params = {
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'near': city_name,
+            'query': 'restaurants',
+            'limit': 10,
+            'fields' :'name,location',
+            'sort': 'rating'
+        }
+
+        headers = {
+            "accept": "application/json",
+            "Authorization": "fsq3EspygHQ4vVEBDjCoZ/j/Jz23u08mtTLHp66gpA0idio="
+        }
+
+        response = requests.get(base_url, params=params, headers=headers)
+
+        if response.status_code == 200:
+            data_list = response.json()
+            return data_list
+        else:
+            return []
+    
+    def get_city_name(self, context: CallbackContext) -> str:
+        city_data = context.user_data.get('city_data')[0]
+        address_components = city_data.get('address_components')[0]
+        city_name = address_components.get('long_name')
+        return city_name
+    
+    def post_restauraunts(self, update: Update, context: CallbackContext, restaurants: list) -> None:
+        city_restaurants = restaurants.get('results')
+        for restaurant in city_restaurants:
+            restaurant_name = restaurant.get('name')
+            restaurant_location = restaurant.get('location').get('formatted_address')
+            restaurant_location_as_link = self.format_address_as_link(restaurant_location)
+            message_text = f"{restaurant_name}\n{restaurant_location_as_link}"
+            update.message.reply_text(message_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
         pass
 
 class LocalPhrasesCommand(Command):
@@ -115,6 +160,12 @@ class FiveFactsCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
         # Your code to provide help or instructions
         update.message.reply_text("Here are some facts about your destination:")
+        pass
+
+class WeatherForecastCommand(Command):
+    def execute(self, update: Update, context: CallbackContext) -> None:
+        # Your code to provide weather forecast
+        update.message.reply_text("Here's the weather forecast for your destination:")
         pass
 
 class HelpCommand(Command):
