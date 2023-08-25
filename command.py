@@ -169,7 +169,7 @@ class WeatherForecastCommand(Command):
         city_coordinates = self.get_city_coordinates(context)
         weather_now = self.get_weather_forecast(city_coordinates)
         weather_desc = weather_now.get('daily')[0].get('summary')
-        update.message.reply_text(f'Here is the weather forecast for your destination: {weather_desc}')
+        update.message.reply_text(f'Here is the weather forecast for your destination: {weather_desc}', reply_markup=self.get_weather_keyboard())
         pass
 
     def get_city_coordinates(self, context: CallbackContext) -> str:
@@ -188,6 +188,13 @@ class WeatherForecastCommand(Command):
             return weather_data
         else:
             return []
+    
+    def get_weather_keyboard(self) -> InlineKeyboardMarkup:
+        # Return the InlineKeyboardMarkup with the "Back to Lobby" button
+        back_to_lobby_button = KeyboardButton("Back")
+        more_landmarks_button = KeyboardButton("Tell me more about current weather!")
+        keyboard = [[back_to_lobby_button], [more_landmarks_button]]
+        return ReplyKeyboardMarkup(keyboard)
 
 class HelpCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
