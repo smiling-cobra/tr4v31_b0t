@@ -18,7 +18,7 @@ client_id = os.environ.get('FOURSQUARE_CLIENT_ID')
 client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
 base_url = os.environ.get('FOURSQSARE_API_URL')
 
-weather_api_key = os.environ.get('WEATHER_API_KEY')
+weather_api_key = os.environ.get('OPEN_WEATHER_API_KEY')
 
 class Command(ABC):
     @abstractmethod
@@ -167,20 +167,27 @@ class FiveFactsCommand(Command):
 class WeatherForecastCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
         city_coordinates = self.get_city_coordinates(context)
-        print('COORDS:', city_coordinates)
-        update.message.reply_text("Here's the weather forecast for your destination:")
+        weather_now = self.get_weather_forecast(city_coordinates)
+        weather_desc = weather_now.get('daily')[0].get('summary')
+        update.message.reply_text(f'Here is the weather forecast for your destination: {weather_desc}')
         pass
 
     def get_city_coordinates(self, context: CallbackContext) -> str:
         city_data = context.user_data.get('city_data')[0]
-        print(city_data)
         lat = city_data.get('geometry').get('location').get('lat')
         lng = city_data.get('geometry').get('location').get('lng')
         return {'lat': lat, 'lng': lng}
     
     def get_weather_forecast(self, city_coordinates: dict) -> list:
-        # Weather request goes here
-        pass
+        weather_url = f'https://api.openweathermap.org/data/3.0/onecall?lat={city_coordinates.get("lat")}&lon={city_coordinates.get("lng")}&appid=23f15497c341cb62b6878982f298236f'
+
+        response = requests.get(weather_url)
+
+        if response.status_code == 200:
+            weather_data = response.json()
+            return weather_data
+        else:
+            return []
 
 class HelpCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
