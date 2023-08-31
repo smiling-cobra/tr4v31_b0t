@@ -39,8 +39,8 @@ class TouristAttractionsCommand(Command):
     
     def get_landmark_keyboard(self) -> InlineKeyboardMarkup:
         # Return the InlineKeyboardMarkup with the "Back to Lobby" button
-        back_to_lobby_button = KeyboardButton("Back")
-        more_landmarks_button = KeyboardButton("Show me more landmarks!")
+        back_to_lobby_button = KeyboardButton("🔙 Back")
+        more_landmarks_button = KeyboardButton("🗽 Show me more landmarks!")
         keyboard = [[back_to_lobby_button], [more_landmarks_button]]
         return ReplyKeyboardMarkup(keyboard)
     
@@ -101,8 +101,8 @@ class AffordableEatsCommand(Command):
     
     def get_affordable_eats_keyboard(self, context: CallbackContext) -> InlineKeyboardMarkup:
         city_name = self.get_city_name(context)
-        back_to_lobby_button = KeyboardButton("Back")
-        more_restauraunts_button = KeyboardButton(f"Show me more restaurants in {city_name}!")
+        back_to_lobby_button = KeyboardButton("🔙 Back")
+        more_restauraunts_button = KeyboardButton(f"🥗 Show me more restaurants in {city_name}!")
         keyboard = [[back_to_lobby_button], [more_restauraunts_button]]
         return ReplyKeyboardMarkup(keyboard)
     
@@ -191,8 +191,8 @@ class WeatherForecastCommand(Command):
     
     def get_weather_keyboard(self) -> InlineKeyboardMarkup:
         # Return the InlineKeyboardMarkup with the "Back to Lobby" button
-        back_to_lobby_button = KeyboardButton("Back")
-        more_landmarks_button = KeyboardButton("Tell me more about current weather!")
+        back_to_lobby_button = KeyboardButton("🔙 Back")
+        more_landmarks_button = KeyboardButton("☀️ Tell me more about current weather!")
         keyboard = [[back_to_lobby_button], [more_landmarks_button]]
         return ReplyKeyboardMarkup(keyboard)
 
@@ -200,5 +200,10 @@ class HelpCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
         # Your code to provide help or instructions
         update.message.reply_text("How can I assist you?")
+        pass
+
+
+class BackCommand(Command):
+    def execute(self, update: Update, context: CallbackContext) -> None:
         pass
     
