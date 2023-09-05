@@ -6,6 +6,7 @@ from datetime import date
 from abc import ABC, abstractmethod
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+from common import get_lobby_keyboard
 
 # # Configure the logging settings
 # logging.basicConfig(
@@ -17,7 +18,6 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Callb
 client_id = os.environ.get('FOURSQUARE_CLIENT_ID')
 client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
 base_url = os.environ.get('FOURSQSARE_API_URL')
-
 weather_api_key = os.environ.get('OPEN_WEATHER_API_KEY')
 
 class Command(ABC):
@@ -179,7 +179,10 @@ class WeatherForecastCommand(Command):
         return {'lat': lat, 'lng': lng}
     
     def get_weather_forecast(self, city_coordinates: dict) -> list:
-        weather_url = f'https://api.openweathermap.org/data/3.0/onecall?lat={city_coordinates.get("lat")}&lon={city_coordinates.get("lng")}&appid=23f15497c341cb62b6878982f298236f'
+        lat = city_coordinates.get("lat")
+        lon = city_coordinates.get("lng")
+        appid = '23f15497c341cb62b6878982f298236f'
+        weather_url = f'https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={appid}'
 
         response = requests.get(weather_url)
 
@@ -205,5 +208,6 @@ class HelpCommand(Command):
 
 class BackCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
-        pass
+        update.message.reply_text("What else can I help you with? 👀", reply_markup=get_lobby_keyboard())
+        return LOBBY
     
