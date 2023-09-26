@@ -120,7 +120,8 @@ def cancel(update: Update, context: CallbackContext):
 
 
 def error(update: Update, context: CallbackContext):
-    print(f'Update {update} caused error {context.error}')
+    # print(f'Update {update} caused error {context.error}')
+    pass
 
 
 def main() -> None:
