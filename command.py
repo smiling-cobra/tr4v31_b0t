@@ -9,19 +9,19 @@ from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboard
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from common import get_lobby_keyboard
 
-# # Configure the logging settings
-# logging.basicConfig(
-#     level=logging.DEBUG,  # Set the logging level to DEBUG (you can use INFO, WARNING, ERROR, etc.)
-#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-#     datefmt='%Y-%m-%d %H:%M:%S'
-# )
+# Configure the logging settings
+logging.basicConfig(
+    level=logging.DEBUG,  # Set the logging level to DEBUG (you can use INFO, WARNING, ERROR, etc.)
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 client_id = os.environ.get('FOURSQUARE_CLIENT_ID')
 client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
 base_url = os.environ.get('FOURSQSARE_API_URL')
 weather_api_key = os.environ.get('OPEN_WEATHER_API_KEY')
-
 openai.api_key = os.environ.get('OPEN_AI_KEY')
+google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 
 class Command(ABC):
     @abstractmethod
@@ -32,9 +32,71 @@ class TouristAttractionsCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
         city_name = self.get_city_name(context)
         landmarks = self.get_landmarks(city_name)
+        
+        places = self.get_places(city_name)
+        
         context.user_data['landmarks'] = landmarks['results']
         update.message.reply_text(f"Here are some popular tourist attractions in {city_name}:", reply_markup=self.get_landmark_keyboard())
         self.post_landmarks(update, context, landmarks)
+    
+    def get_places(self, city_name: str) -> None:
+        GOOGLE_PLACES_API_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+
+        params = {
+            'input': f"landmarks in {city_name}",
+            'inputtype': 'textquery',
+            'fields': 'photos,place_id,geometry',
+            'key': google_map_api_key
+        }
+        
+        response = requests.get(GOOGLE_PLACES_API_URL, params=params)
+        
+        try:
+            data = response.json()
+        except ValueError as e:
+            return []
+            print(f"Error parsing JSON: {e}")
+        
+        print('DATA', data)
+        
+        response_status = data.get('status')
+        
+        if response_status == 'OK':
+            places = data.get('candidates', [])
+            print('places', places)
+            # places_list = self.compose_places_list(places)
+            # print('RESPONSE', places_list)
+            # return places_list
+        else:
+            return f"No places were found! Status: {response_status}"
+        
+    # def compose_places_list(self, raw_places: list):
+    #     GOOGLE_PHOTO_API_URL = "https://maps.googleapis.com/maps/api/place/photo"
+    #     landmarks_info = []
+        
+    #     for place in places:
+    #         landmark = {}
+    #         photos = place.get('photos', [])
+    #         if photos:
+    #             photo_ref = photos[0].get('photo_reference')
+    #             if photo_ref:
+    #                 photo_params = {
+    #                     'maxwidth': 400,
+    #                     'photoreference': photo_ref,
+    #                     'key': google_map_api_key
+    #                 }
+                    
+    #                 photo_url = requests.get(GOOGLE_PHOTO_API_URL, params=photo_params).url
+    #                 landmark['photo_url'] = photo_url
+            
+    #         geometry = place.get('geometry', {}).get('location', {})
+    #         landmark['lat'] = geometry.get('lat')
+    #         landmark['lng'] = geometry.get('lng')
+            
+    #         landmarks_info.append(landmark)
+            
+    #     return landmarks_info
+        
     
     def format_address_as_link(self, address: str):
         google_maps_link = f'https://www.google.com/maps/search/?api=1&query={html.escape(address)}'
