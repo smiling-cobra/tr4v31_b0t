@@ -4,7 +4,8 @@ from common import get_lobby_keyboard
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from messages import WELCOME_MESSAGE_LONG, WELCOME_MESSAGE_CONCISE
-from command import TouristAttractionsCommand, WeatherForecastCommand, AffordableEatsCommand, LocalPhrasesCommand, TravelTipsCommand, FiveFactsCommand, HelpCommand, BackCommand
+from command import WeatherForecastCommand, LocalPhrasesCommand, TravelTipsCommand, FiveFactsCommand, HelpCommand, BackCommand
+from commands import Landmarks, Restauraunts
 
 telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
@@ -26,9 +27,9 @@ DESTINATION, LOBBY = range(2)
 
 
 user_choice_to_command = {
-    TOURIST_ATTRACTIONS: TouristAttractionsCommand(),
+    TOURIST_ATTRACTIONS: Landmarks(),
     WEATHER_FORECAST: WeatherForecastCommand(),
-    AFFORDABLE_EATS: AffordableEatsCommand(),
+    AFFORDABLE_EATS: Restauraunts(),
     LOCAL_PHRASES: LocalPhrasesCommand(),
     TRAVEL_TIPS: TravelTipsCommand(),
     FIVE_FACTS: FiveFactsCommand(),

@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ParseMode
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from common import get_lobby_keyboard
+from commands import Command
 
 # Configure the logging settings
 logging.basicConfig(
@@ -19,147 +20,20 @@ logging.basicConfig(
 client_id = os.environ.get('FOURSQUARE_CLIENT_ID')
 client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
 base_url = os.environ.get('FOURSQSARE_API_URL')
+foursquare_auth_key = os.environ.get('FOURSQUARE_API_KEY')
 weather_api_key = os.environ.get('OPEN_WEATHER_API_KEY')
 openai.api_key = os.environ.get('OPEN_AI_KEY')
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 
-class Command(ABC):
-    @abstractmethod
-    def execute(self, update: Update, context: CallbackContext) -> None:
-        pass
-
-class TouristAttractionsCommand(Command):
-    def execute(self, update: Update, context: CallbackContext) -> None:
-        city_name = self.get_city_name(context)
-        # landmarks = self.get_landmarks(city_name)
-        
-        places = self.get_places(city_name)
-        context.user_data['landmarks'] = places
-        update.message.reply_text(f"Here are some popular tourist attractions in {city_name}:", reply_markup=self.get_landmark_keyboard())
-        
-        self.post_landmarks(update, context, places)
-    
-    def get_places(self, city_name: str) -> list:
-        GOOGLE_PLACES_API_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-
-        params = {
-            'query': f"landmarks in {city_name}",
-            'inputtype': 'textquery',
-            'fields': 'photos,place_id,geometry',
-            'key': google_map_api_key
-        }
-
-        response = requests.get(GOOGLE_PLACES_API_URL, params=params)
-        
-        try:
-            data = response.json()
-        except ValueError as e:
-            return []
-            print(f"Error parsing JSON: {e}")
-        
-        response_status = data.get('status')
-        
-        if response_status == 'OK':
-            places = data.get('results', [])
-            places_list = self.compose_places_list(places)
-            # Limit the number of places to 5 for now
-            places_list_limited = places_list[:5]
-            return places_list_limited
-        else:
-            return f"No places were found! Status: {response_status}"
-        
-    def compose_places_list(self, places: list) -> None:
-        GOOGLE_PHOTO_API_URL = "https://maps.googleapis.com/maps/api/place/photo"
-        landmarks_info = []
-        
-        for place in places:
-            landmark = {}
-            photos = place.get('photos', [])
-            if photos:
-                photo_ref = photos[0].get('photo_reference')
-                if photo_ref:
-                    photo_params = {
-                        'maxwidth': 400,
-                        'photoreference': photo_ref,
-                        'key': google_map_api_key
-                    }
-                    
-                    try:
-                        photo_url = requests.get(GOOGLE_PHOTO_API_URL, params=photo_params).url
-                        landmark['photo'] = photo_url
-                    except ValueError as e:
-                        return []
-                        print(f"Error parsing JSON: {e}")
-            
-            landmark['name'] = place.get('name')
-            landmark['formatted_address'] = place.get('formatted_address')
-            
-            landmarks_info.append(landmark)
-            
-        return landmarks_info
-    
-    def format_address_as_link(self, address: str):
-        google_maps_link = f'https://www.google.com/maps/search/?api=1&query={html.escape(address)}'
-        return f'<a href="{google_maps_link}">{html.escape(address)}</a>'
-    
-    def get_landmark_keyboard(self) -> InlineKeyboardMarkup:
-        # Return the InlineKeyboardMarkup with the "Back to Lobby" button
-        back_to_lobby_button = KeyboardButton("🔙 Back")
-        more_landmarks_button = KeyboardButton("🗽 Show me more landmarks!")
-        keyboard = [[back_to_lobby_button], [more_landmarks_button]]
-        return ReplyKeyboardMarkup(keyboard)
-    
-    def get_city_name(self, context: CallbackContext) -> str:
-        city_data = context.user_data.get('city_data')[0]
-        address_components = city_data.get('address_components')[0]
-        city_name = address_components.get('long_name')
-        return city_name
-    
-    # def get_landmarks(self, city_name: str) -> list:
-    #     version = date.today().strftime("%Y%m%d")
-
-    #     params = {
-    #         'client_id': client_id,
-    #         'client_secret': client_secret,
-    #         'v': version,
-    #         'near': city_name,
-    #         'query': 'landmarks',
-    #         'limit': 5,
-    #         'fields' :'name,location'
-    #     }
-
-    #     headers = {
-    #         "accept": "application/json",
-    #         "Authorization": "fsq3EspygHQ4vVEBDjCoZ/j/Jz23u08mtTLHp66gpA0idio="
-    #     }
-
-    #     response = requests.get(base_url, params=params, headers=headers)
-
-    #     if response.status_code == 200:
-    #         data_list = response.json()
-    #         return data_list
-    #     else:
-    #         return []
-
-    def post_landmarks(self, update: Update, context: CallbackContext, landmarks: list) -> None:
-        for landmark in landmarks:
-            landmark_name = landmark.get('name')                
-            landmark_location = landmark.get('formatted_address')
-            landmark_photo = landmark.get('photo')
-            
-            if landmark_photo:
-                update.message.reply_photo(photo=landmark_photo)
-                
-            landmark_location_as_link = self.format_address_as_link(landmark_location)
-            message_text = f"{landmark_name}\n{landmark_location_as_link}"
-            update.message.reply_text(message_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     
 class AffordableEatsCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
         city_name = self.get_city_name(context)
         restaurants = self.get_restauraunts(city_name)
-        context.user_data['affordable_eats'] = restaurants['results']
+        
+        context.user_data['affordable_eats'] = restaurants
         update.message.reply_text(f"Here are some affordable places to eat in {city_name}, sorted by rating:", reply_markup=self.get_affordable_eats_keyboard(context))
+        
         self.post_restauraunts(update, context, restaurants)
     
     def format_address_as_link(self, address: str):
@@ -168,32 +42,57 @@ class AffordableEatsCommand(Command):
     
     def get_affordable_eats_keyboard(self, context: CallbackContext) -> InlineKeyboardMarkup:
         city_name = self.get_city_name(context)
-        back_to_lobby_button = KeyboardButton("🔙 Back")
-        more_restauraunts_button = KeyboardButton(f"🥗 Show me more restaurants in {city_name}!")
-        keyboard = [[back_to_lobby_button], [more_restauraunts_button]]
-        return ReplyKeyboardMarkup(keyboard)
+        return ReplyKeyboardMarkup([[KeyboardButton("🔙 Back")], [KeyboardButton(f"🥗 Show me more restaurants in {city_name}!")]])
+    
+    def get_venue_photos(self, venue_id: str) -> str:
+        url = f'https://api.foursquare.com/v3/places/{venue_id}/photos'
+        params = {
+            'client_id': client_id,
+            'client_secret': client_secret,
+        }
+        
+        headers = {
+            "accept": "application/json",
+            "Authorization": foursquare_auth_key
+        }
+
+        response = requests.get(url, params=params, headers=headers)
+        
+        if response.status_code == 200:
+            photos = response.json()
+            if photos:
+                venue_photo_url = f"{photos[0].get('prefix')}300x300{photos[0].get('suffix')}"
+                return venue_photo_url
+        else:
+            return []
+
     
     def get_restauraunts(self, city_name: str) -> list:
+        # https://location.foursquare.com/developer/reference/response-fields
         params = {
             'client_id': client_id,
             'client_secret': client_secret,
             'near': city_name,
             'query': 'restaurants',
             'limit': 10,
-            'fields' :'name,location',
+            'fields' :'name,location,fsq_id,distance,link',  
             'sort': 'rating'
         }
 
         headers = {
             "accept": "application/json",
-            "Authorization": "fsq3EspygHQ4vVEBDjCoZ/j/Jz23u08mtTLHp66gpA0idio="
+            "Authorization": foursquare_auth_key
         }
 
         response = requests.get(base_url, params=params, headers=headers)
 
         if response.status_code == 200:
-            data_list = response.json()
-            return data_list
+            data = response.json()
+            venues = data.get('results')
+            for venue in venues:
+                venue_id = venue.get('fsq_id')
+                venue['photo'] = self.get_venue_photos(venue_id)
+            return venues
         else:
             return []
     
@@ -204,14 +103,17 @@ class AffordableEatsCommand(Command):
         return city_name
     
     def post_restauraunts(self, update: Update, context: CallbackContext, restaurants: list) -> None:
-        city_restaurants = restaurants.get('results')
-        for restaurant in city_restaurants:
+        for restaurant in restaurants:
             restaurant_name = restaurant.get('name')
             restaurant_location = restaurant.get('location').get('formatted_address')
+            restaurant_photo = restaurant.get('photo')
+            
+            if restaurant_photo:
+                update.message.reply_photo(photo=restaurant_photo)
+            
             restaurant_location_as_link = self.format_address_as_link(restaurant_location)
             message_text = f"{restaurant_name}\n{restaurant_location_as_link}"
             update.message.reply_text(message_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-        pass
 
 class LocalPhrasesCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
