@@ -1,11 +1,18 @@
 import os
+import logging
 import requests
 from common import get_lobby_keyboard
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from messages import WELCOME_MESSAGE_LONG, WELCOME_MESSAGE_CONCISE
-from command import WeatherForecastCommand, LocalPhrasesCommand, TravelTipsCommand, FiveFactsCommand, HelpCommand, BackCommand
-from commands import Landmarks, Restauraunts
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from commands import Landmarks, Restauraunts, Weather, Stories, BackCommand, HelpCommand, Tips, Phrases
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+
+# Configure the logging settings
+logging.basicConfig(
+    level=logging.DEBUG,  # Set the logging level to DEBUG (you can use INFO, WARNING, ERROR, etc.)
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
@@ -15,8 +22,8 @@ TOURIST_ATTRACTIONS = '🗽 Sites'
 WEATHER_FORECAST = '☀️ Weather'
 AFFORDABLE_EATS = '🥗 Eats'
 LOCAL_PHRASES = '🗣 Phrases'
+FIVE_FACTS = '🎲 Stories'
 TRAVEL_TIPS = '🎯 Tips'
-FIVE_FACTS = '🎲 Facts'
 HELP = '❓ Help'
 BACK = '🔙 Back'
 
@@ -28,11 +35,11 @@ DESTINATION, LOBBY = range(2)
 
 user_choice_to_command = {
     TOURIST_ATTRACTIONS: Landmarks(),
-    WEATHER_FORECAST: WeatherForecastCommand(),
+    WEATHER_FORECAST: Weather(),
     AFFORDABLE_EATS: Restauraunts(),
-    LOCAL_PHRASES: LocalPhrasesCommand(),
-    TRAVEL_TIPS: TravelTipsCommand(),
-    FIVE_FACTS: FiveFactsCommand(),
+    LOCAL_PHRASES: Phrases(),
+    TRAVEL_TIPS: Tips(),
+    FIVE_FACTS: Stories(),
     HELP: HelpCommand(),
     BACK: BackCommand()
 }
