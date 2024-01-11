@@ -6,7 +6,7 @@ WEATHER_FORECAST = '☀️ Weather'
 AFFORDABLE_EATS = '🥗 Eats'
 LOCAL_PHRASES = '🗣 Phrases'
 TRAVEL_TIPS = '🎯 Tips'
-FIVE_FACTS = '🎲 Facts'
+FIVE_FACTS = '🎲 Stories'
 HELP = '❓ Help'
 BACK = '🔙 Back'
 

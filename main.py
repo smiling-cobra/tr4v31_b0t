@@ -6,6 +6,7 @@ from messages import WELCOME_MESSAGE_LONG, WELCOME_MESSAGE_CONCISE
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from commands import Landmarks, Restauraunts, Weather, Stories, BackCommand, HelpCommand, Tips, Phrases
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+from services import OpenAIHelper
 
 # Configure the logging settings
 logging.basicConfig(
@@ -32,6 +33,7 @@ CITY_REQUEST_ERROR_TEXT = 'No city was found! Status: ZERO_RESULTS'
 # Define states for the conversation
 DESTINATION, LOBBY = range(2)
 
+openai_helper = OpenAIHelper()
 
 user_choice_to_command = {
     TOURIST_ATTRACTIONS: Landmarks(),
@@ -39,7 +41,7 @@ user_choice_to_command = {
     AFFORDABLE_EATS: Restauraunts(),
     LOCAL_PHRASES: Phrases(),
     TRAVEL_TIPS: Tips(),
-    FIVE_FACTS: Stories(),
+    FIVE_FACTS: Stories(openai_helper),
     HELP: HelpCommand(),
     BACK: BackCommand()
 }

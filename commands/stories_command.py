@@ -1,6 +1,4 @@
-import os
 import html
-import openai
 import requests
 from datetime import date
 from abc import ABC, abstractmethod
@@ -9,28 +7,40 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Callb
 from common import get_lobby_keyboard
 from commands import Command
 
-openai.api_key = os.environ.get('OPEN_AI_KEY')
 
 class Stories(Command):
+    # OpenAIHelper is a dependency that we inject into the Stories command
+    def __init__(self, openai_helper):
+        self.openai_helper = openai_helper
+        
     def execute(self, update: Update, context: CallbackContext) -> None:
         city_name = self.get_city_name(context)
-        update.message.reply_text(f"Here are some facts about {city_name}:")
-        city_facts = self.get_facts(city_name)
-        print('city', city_facts)
-    
-    def get_facts(self, city_name: str) -> str:
-        prompt = f"Tell me some interesting facts about {city_name}"
         
+        if city_name:
+            city_facts = self.get_facts(f"Tell me some interesting facts about {city_name}")
+        else:
+            city_facts = ""
+        
+        if city_facts:
+            update.message.reply_text(f"Here are some facts about {city_name}:")
+            update.message.reply_text(city_facts)
+        else:
+            update.message.reply_text(f"Sorry, I couldn't find any facts about {city_name}!")
+        
+    def get_facts(self, prompt: str) -> str:
         try:
-            response = openai.Completion.create(
-                model="gpt-3.5-turbo-instruct",
-                prompt=prompt
-            )
+            response = response = self.openai_helper.get_response(prompt)
+            return self.get_response(response)
         except Exception as e:
-            print(f"An error occured: {e}")
-        
-        facts = response.choices[0].text.strip()
-        return facts
+            print(f"An error occurred: {e}")
+            return ""
+    
+    def get_response(self, response: str) -> dict:
+        if response and response['choices']:
+            message = response['choices'][0]['message']['content']
+            return message
+        else:
+            return {}
     
     def get_city_name(self, context: CallbackContext) -> str:
         city_data = context.user_data.get('city_data')[0]
