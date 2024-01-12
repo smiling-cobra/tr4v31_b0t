@@ -4,9 +4,10 @@ import requests
 from common import get_lobby_keyboard
 from messages import WELCOME_MESSAGE_LONG, WELCOME_MESSAGE_CONCISE
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from commands import Landmarks, Restauraunts, Weather, Stories, BackCommand, HelpCommand, Tips, Phrases
+from commands import Landmarks, Restauraunts, Weather, Stories, BackCommand, HelpCommand, Tips, Phrases, VenuePhotoRetriever
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from services import OpenAIHelper
+
 
 # Configure the logging settings
 logging.basicConfig(
@@ -18,6 +19,11 @@ logging.basicConfig(
 telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 geocoding_api_url = os.environ.get('GEOCODING_API_URL')
+
+client_id = os.environ.get('FOURSQUARE_CLIENT_ID')
+client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
+base_url = os.environ.get('FOURSQSARE_API_URL')
+foursquare_auth_key = os.environ.get('FOURSQUARE_API_KEY')
 
 TOURIST_ATTRACTIONS = '🗽 Sites'
 WEATHER_FORECAST = '☀️ Weather'
@@ -34,11 +40,12 @@ CITY_REQUEST_ERROR_TEXT = 'No city was found! Status: ZERO_RESULTS'
 DESTINATION, LOBBY = range(2)
 
 openai_helper = OpenAIHelper()
+venue_photo_retriever = VenuePhotoRetriever(client_id, client_secret, foursquare_auth_key)
 
 user_choice_to_command = {
     TOURIST_ATTRACTIONS: Landmarks(),
     WEATHER_FORECAST: Weather(),
-    AFFORDABLE_EATS: Restauraunts(),
+    AFFORDABLE_EATS: Restauraunts(venue_photo_retriever),
     LOCAL_PHRASES: Phrases(),
     TRAVEL_TIPS: Tips(),
     FIVE_FACTS: Stories(openai_helper),

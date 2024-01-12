@@ -7,3 +7,4 @@ from .help_command import HelpCommand
 from .back_command import BackCommand
 from .landmarks_command import Landmarks
 from .restauraunts_command import Restauraunts
+from .venue_photo_retriever import VenuePhotoRetriever

@@ -1,5 +1,6 @@
 import os
 import html
+import random
 import requests
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, ParseMode
 from telegram.ext import CallbackContext
@@ -12,13 +13,17 @@ foursquare_auth_key = os.environ.get('FOURSQUARE_API_KEY')
 
     
 class Restauraunts(Command):
+    def __init__(self, photo_retriever):
+        self.photo_retriever = photo_retriever
+    
     def execute(self, update: Update, context: CallbackContext) -> None:
         city_name = self.get_city_name(context)
         restaurants = self.get_restauraunts(city_name)
         
+        # Save the restaurants in the user's context
         context.user_data['affordable_eats'] = restaurants
-        update.message.reply_text(f"Here are some affordable places to eat in {city_name}, sorted by rating:", reply_markup=self.get_affordable_eats_keyboard(context))
         
+        update.message.reply_text(f"Here are some affordable places to eat in {city_name}, sorted by rating:", reply_markup=self.get_affordable_eats_keyboard(context))
         self.post_restauraunts(update, context, restaurants)
     
     def format_address_as_link(self, address: str):
@@ -28,30 +33,7 @@ class Restauraunts(Command):
     def get_affordable_eats_keyboard(self, context: CallbackContext) -> InlineKeyboardMarkup:
         city_name = self.get_city_name(context)
         return ReplyKeyboardMarkup([[KeyboardButton("🔙 Back")], [KeyboardButton(f"🥗 Show me more restaurants in {city_name}!")]])
-    
-    def get_venue_photos(self, venue_id: str) -> str:
-        url = f'https://api.foursquare.com/v3/places/{venue_id}/photos'
-        params = {
-            'client_id': client_id,
-            'client_secret': client_secret,
-        }
         
-        headers = {
-            "accept": "application/json",
-            "Authorization": foursquare_auth_key
-        }
-
-        response = requests.get(url, params=params, headers=headers)
-        
-        if response.status_code == 200:
-            photos = response.json()
-            if photos:
-                venue_photo_url = f"{photos[0].get('prefix')}300x300{photos[0].get('suffix')}"
-                return venue_photo_url
-        else:
-            return []
-
-    
     def get_restauraunts(self, city_name: str) -> list:
         # https://location.foursquare.com/developer/reference/response-fields
         params = {
@@ -74,9 +56,10 @@ class Restauraunts(Command):
         if response.status_code == 200:
             data = response.json()
             venues = data.get('results')
+            shuffled_venues = random.shuffle(venues)
             for venue in venues:
                 venue_id = venue.get('fsq_id')
-                venue['photo'] = self.get_venue_photos(venue_id)
+                venue['photo'] = self.photo_retriever.get_venue_photos(venue_id)
             return venues
         else:
             return []
