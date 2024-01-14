@@ -92,24 +92,30 @@ def handle_initial_user_input(update: Update, context: CallbackContext):
         return LOBBY
 
 
-def handle_message(update: Update, context: CallbackContext):
-    message_type: str = update.message.chat.type
-    text: str = update.message.text
+def group_message_handler(update: Update, context: CallbackContext):
+    # Extract the message and chat details
+    message = update.message
+    chat = message.chat
+    text = message.text
 
-    print(f'User({update.message.chat.id}) in {message_type} : "{text}"')
-    
-    # This block is to handle cases when you want to mention [travel_bot] directly in group chat.
-    if message_type == 'group':
-        if BOT_USERNAME in text:
-            new_text: str = text.replace(BOT_USERNAME, '').strip()
-            response: str = handle_response(new_text)
-        else:
-            return
+    # Check if the bot is mentioned in the group chat
+    if f"@{context.bot.username}" in text:
+        # Process the message following the mention
+        response_text = process_group_message(text, chat.id)
+        # Send a reply to the group
+        message.reply_text(response_text)
     else:
-        response: str = handle_response(text)
-    
-    print('Bot:', response)
-    update.message.reply_text(response)
+        # Handle other group messages (if needed)
+        # For instance, you can log the message or perform some actions
+        # Note: Be mindful of privacy and group rules
+        pass
+
+def process_group_message(text, chat_id):
+    # Custom logic to process the message
+    # For example, stripping the bot's mention and generating a response
+    clean_text = text.replace(f"@{context.bot.username}", "").strip()
+    response = f"Received in chat {chat_id}: {clean_text}"
+    return response
 
 
 def handle_lobby_choice(update: Update, context: CallbackContext):
@@ -124,7 +130,7 @@ def handle_lobby_choice(update: Update, context: CallbackContext):
 
 
 def start(update: Update, context: CallbackContext):
-    user_name = update.message.chat.first_name
+    user_name = update.message.chat.first_name or 'Traveler'
     welcome_message = WELCOME_MESSAGE_CONCISE.format(user_name)
     update.message.reply_text(welcome_message)
     return DESTINATION
@@ -137,16 +143,14 @@ def cancel(update: Update, context: CallbackContext):
 
 
 def error(update: Update, context: CallbackContext):
-    # print(f'Update {update} caused error {context.error}')
+    print(f'Update {update} caused error {context.error}')
     pass
 
+def help(update: Update, context: CallbackContext):
+    update.message.reply_text("Here's how you can use this bot: ...")
+    pass
 
-def main() -> None:
-    print('Starting bot...')
-
-    updater = Updater(telegram_bot_token, use_context=True)
-    dispatcher = updater.dispatcher
-
+def setup_conversation_handler(dispatcher):
     # Create the ConversationHandler to handle the onboarding process and lobby choices
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
@@ -156,14 +160,30 @@ def main() -> None:
         },
         fallbacks=[CommandHandler('cancel', cancel)]
     )
-
     # Add the ConversationHandler to the dispatcher
     dispatcher.add_handler(conv_handler)
 
+def setup_group_message_handler(dispatcher):
+    # Add group chat handler
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, group_message_handler))
+    
+def setup_error_handler(dispatcher):
     # Errors
     dispatcher.add_error_handler(error)
 
-    # Polls the bot
+def main() -> None:
+    print('Starting bot...')
+
+    updater = Updater(telegram_bot_token, use_context=True)
+    dispatcher = updater.dispatcher
+
+    setup_conversation_handler(dispatcher)
+    setup_group_message_handler(dispatcher)
+    setup_error_handler(dispatcher)
+    
+    dispatcher.add_handler(CommandHandler('help', help))
+
+    # Start polling the bot for updates
     print('Polling...')
     updater.start_polling()
     updater.idle()
