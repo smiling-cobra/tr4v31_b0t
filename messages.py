@@ -27,4 +27,34 @@ WELCOME_MESSAGE_CONCISE = '''
 🙌 Happy travels! For assistance, just type /help anytime.
 '''
 
-# Add more messages here as needed...
+DEFAULT_USER_NAME = 'traveler'
+
+HELP_WELCOME_MESSAGE = '''
+Here's how you can use this bot: ...
+'''
+
+NO_CITY_FOUND_MESSAGE = '''
+🤷‍♂️ Excusez-moi but no city was found... Try again!
+'''
+
+SHOW_MORE_LANDMARKS_MESSAGE = '''
+"🗽 Show me more landmarks, please!"
+'''
+
+def create_initial_greeting_message(user_name, user_input) -> str:
+    return f"🔥 Awesome, {user_name}! You're traveling to {user_input}! Here's what I can do ->"
+
+def create_wrong_input_message(user_name) -> str:
+    return f"🤷‍♂️ You've probably made a wrong input, {user_name}. Give it another try!"
+
+def create_farewell_message(user_name) -> str:
+    return f"👋 Have a nice trip, {user_name}! Feel free to reach out again anytime!"
+
+def create_following_question_message(user_name) -> str:
+    return f"Hey, {user_name}, what else can I help you with? 👀"
+
+def create_welcome_landmarks_message(user_name, city_name) -> str:
+    return f"📍 Here are some popular tourist attractions in {city_name}, {user_name} ->"
+
+def create_welcome_restaurants_message(user_name, city_name) -> str:
+    return f"🥗 Here are some affordable places to eat in {city_name}, {user_name} ->"

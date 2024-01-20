@@ -5,16 +5,18 @@ from datetime import date
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, ParseMode
 from telegram.ext import CallbackContext
 from commands import Command
+from messages import create_welcome_landmarks_message, SHOW_MORE_LANDMARKS_MESSAGE
 
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 
 class Landmarks(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
+        user_name = update.message.chat.first_name or DEFAULT_USER_NAME
         city_name = self.get_city_name(context)
         # landmarks = self.get_landmarks(city_name)
         places = self.get_places(city_name)
         context.user_data['landmarks'] = places
-        update.message.reply_text(f"Here are some popular tourist attractions in {city_name}:", reply_markup=self.get_landmark_keyboard())
+        update.message.reply_text(create_welcome_landmarks_message(user_name, city_name), reply_markup=self.get_landmark_keyboard())
         
         self.post_landmarks(update, context, places)
     
@@ -84,7 +86,7 @@ class Landmarks(Command):
     def get_landmark_keyboard(self) -> InlineKeyboardMarkup:
         # Return the InlineKeyboardMarkup with the "Back to Lobby" button
         back_to_lobby_button = KeyboardButton("🔙 Back")
-        more_landmarks_button = KeyboardButton("🗽 Show me more landmarks!")
+        more_landmarks_button = KeyboardButton(SHOW_MORE_LANDMARKS_MESSAGE)
         keyboard = [[back_to_lobby_button], [more_landmarks_button]]
         return ReplyKeyboardMarkup(keyboard)
     
@@ -94,6 +96,21 @@ class Landmarks(Command):
         city_name = address_components.get('long_name')
         return city_name
     
+    
+    def post_landmarks(self, update: Update, context: CallbackContext, landmarks: list) -> None:
+        for landmark in landmarks:
+            landmark_name = landmark.get('name')                
+            landmark_location = landmark.get('formatted_address')
+            landmark_photo = landmark.get('photo')
+            
+            if landmark_photo:
+                update.message.reply_photo(photo=landmark_photo)
+                
+            landmark_location_as_link = self.format_address_as_link(landmark_location)
+            message_text = f"{landmark_name}\n{landmark_location_as_link}"
+            update.message.reply_text(message_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+            
+
     # def get_landmarks(self, city_name: str) -> list:
     #     version = date.today().strftime("%Y%m%d")
 
@@ -119,16 +136,3 @@ class Landmarks(Command):
     #         return data_list
     #     else:
     #         return []
-
-    def post_landmarks(self, update: Update, context: CallbackContext, landmarks: list) -> None:
-        for landmark in landmarks:
-            landmark_name = landmark.get('name')                
-            landmark_location = landmark.get('formatted_address')
-            landmark_photo = landmark.get('photo')
-            
-            if landmark_photo:
-                update.message.reply_photo(photo=landmark_photo)
-                
-            landmark_location_as_link = self.format_address_as_link(landmark_location)
-            message_text = f"{landmark_name}\n{landmark_location_as_link}"
-            update.message.reply_text(message_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)

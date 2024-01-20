@@ -5,6 +5,7 @@ import requests
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, ParseMode
 from telegram.ext import CallbackContext
 from commands import Command
+from messages import create_welcome_restaurants_message
 
 client_id = os.environ.get('FOURSQUARE_CLIENT_ID')
 client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
@@ -17,13 +18,14 @@ class Restauraunts(Command):
         self.photo_retriever = photo_retriever
     
     def execute(self, update: Update, context: CallbackContext) -> None:
+        user_name = update.message.chat.first_name or DEFAULT_USER_NAME
         city_name = self.get_city_name(context)
         restaurants = self.get_restauraunts(city_name)
         
         # Save the restaurants in the user's context
         context.user_data['affordable_eats'] = restaurants
         
-        update.message.reply_text(f"Here are some affordable places to eat in {city_name}, sorted by rating:", reply_markup=self.get_affordable_eats_keyboard(context))
+        update.message.reply_text(create_welcome_restaurants_message(user_name, city_name), reply_markup=self.get_affordable_eats_keyboard(context))
         self.post_restauraunts(update, context, restaurants)
     
     def format_address_as_link(self, address: str):

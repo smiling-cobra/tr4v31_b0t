@@ -2,8 +2,10 @@ from commands import Command
 from telegram import Update
 from telegram.ext import CallbackContext
 from common import get_lobby_keyboard
+from messages import create_following_question_message
 
 class BackCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
-        update.message.reply_text("What else can I help you with? 👀", reply_markup=get_lobby_keyboard())
+        user_name = update.message.chat.first_name or DEFAULT_USER_NAME
+        update.message.reply_text(create_following_question_message(user_name), reply_markup=get_lobby_keyboard())
         return LOBBY

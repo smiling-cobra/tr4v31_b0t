@@ -6,6 +6,7 @@ from telegram import Update, ReplyKeyboardRemove
 from commands import Landmarks, Restauraunts, Weather, Stories, BackCommand, HelpCommand, Tips, Phrases, VenuePhotoRetriever
 from telegram.ext import CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from services import OpenAIHelper
+from messages import NO_CITY_FOUND_MESSAGE, DEFAULT_USER_NAME, create_initial_greeting_message, create_wrong_input_message, create_farewell_message
 
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 geocoding_api_url = os.environ.get('GEOCODING_API_URL')
@@ -17,7 +18,6 @@ foursquare_auth_key = os.environ.get('FOURSQUARE_API_KEY')
 
 DESTINATION, LOBBY = range(2)
 CITY_REQUEST_ERROR_TEXT = 'No city was found! Status: ZERO_RESULTS'
-DEFAULT_USER_NAME = 'traveler'
 
 TOURIST_ATTRACTIONS = '🗽 Sites'
 WEATHER_FORECAST = '☀️ Weather'
@@ -74,10 +74,10 @@ class UserDialogueHelper:
         city_data = fetch_city_data(user_input, google_map_api_key, geocoding_api_url, context)
 
         if city_data == CITY_REQUEST_ERROR_TEXT:
-            update.message.reply_text("🤷‍♂️ Excusez-moi but no city was found... Try again!")
+            update.message.reply_text(NO_CITY_FOUND_MESSAGE)
         else:
             update.message.reply_text(
-                f"🔥 Awesome, {user_name}! You're traveling to {user_input}! Here's what I can offer ⤵️",
+                create_initial_greeting_message(user_name, user_input),
                 reply_markup=get_lobby_keyboard()
             )
             return LOBBY
@@ -90,7 +90,7 @@ class UserDialogueHelper:
         if command:
             command.execute(update, context)
         else:
-            update.message.reply_text(f"🤷‍♂️ You've probably made a wrong input, {user_name}. Give it another try!")
+            update.message.reply_text(create_wrong_input_message(user_name))
             
     def start(self, update: Update, context: CallbackContext):
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
@@ -100,7 +100,7 @@ class UserDialogueHelper:
 
     def cancel(self, update: Update, context: CallbackContext):
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
-        update.message.reply_text(f"👋 Have a nice trip, {user_name}! Feel free to reach out again anytime!", reply_markup=ReplyKeyboardRemove())
+        update.message.reply_text(create_farewell_message(user_name), reply_markup=ReplyKeyboardRemove())
         return ConversationHandler.END
     
     def setup(self):

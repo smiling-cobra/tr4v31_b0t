@@ -3,6 +3,7 @@ import logging
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 from handlers import GroupMessageHandler, UserDialogueHelper
+from messages import HELP_WELCOME_MESSAGE
 
 telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
 
@@ -18,7 +19,7 @@ def error(update: Update, context: CallbackContext):
     pass
 
 def help(update: Update, context: CallbackContext):
-    update.message.reply_text("Here's how you can use this bot: ...")
+    update.message.reply_text(HELP_WELCOME_MESSAGE)
     pass
     
 def setup_error_handler(dispatcher):
