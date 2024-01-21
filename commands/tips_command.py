@@ -3,7 +3,8 @@ from telegram import Update
 from telegram.ext import CallbackContext
 
 class Tips(Command):
-    # OpenAIHelper is a dependency that we inject into the Tips command
+    # OpenAIHelper and get_city_name are dependencies
+    # injected into the Tips command in user_dialogue_helper
     def __init__(self, openai_helper, get_city_name):
         self.openai_helper = openai_helper
         self.get_city_name = get_city_name
@@ -29,3 +30,10 @@ class Tips(Command):
         except Exception as e:
             print(f"An error occurred: {e}")
             return ""
+        
+    def get_response(self, response: str) -> dict:
+        if response and response['choices']:
+            message = response['choices'][0]['message']['content']
+            return message
+        else:
+            return {}

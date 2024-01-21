@@ -9,7 +9,8 @@ from commands import Command
 
 
 class Stories(Command):
-    # OpenAIHelper is a dependency that we inject into the Stories command
+    # OpenAIHelper and get_city_name are dependencies
+    # injected into the Stories command in user_dialogue_helper
     def __init__(self, openai_helper, get_city_name):
         self.openai_helper = openai_helper
         self.get_city_name = get_city_name
