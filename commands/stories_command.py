@@ -10,8 +10,9 @@ from commands import Command
 
 class Stories(Command):
     # OpenAIHelper is a dependency that we inject into the Stories command
-    def __init__(self, openai_helper):
+    def __init__(self, openai_helper, get_city_name):
         self.openai_helper = openai_helper
+        self.get_city_name = get_city_name
         
     def execute(self, update: Update, context: CallbackContext) -> None:
         city_name = self.get_city_name(context)
@@ -41,9 +42,3 @@ class Stories(Command):
             return message
         else:
             return {}
-    
-    def get_city_name(self, context: CallbackContext) -> str:
-        city_data = context.user_data.get('city_data')[0]
-        address_components = city_data.get('address_components')[0]
-        city_name = address_components.get('long_name')
-        return city_name

@@ -14,8 +14,9 @@ foursquare_auth_key = os.environ.get('FOURSQUARE_API_KEY')
 
     
 class Restauraunts(Command):
-    def __init__(self, photo_retriever):
+    def __init__(self, photo_retriever, get_city_name):
         self.photo_retriever = photo_retriever
+        self.get_city_name = get_city_name
     
     def execute(self, update: Update, context: CallbackContext) -> None:
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
@@ -65,12 +66,6 @@ class Restauraunts(Command):
             return venues
         else:
             return []
-    
-    def get_city_name(self, context: CallbackContext) -> str:
-        city_data = context.user_data.get('city_data')[0]
-        address_components = city_data.get('address_components')[0]
-        city_name = address_components.get('long_name')
-        return city_name
     
     def post_restauraunts(self, update: Update, context: CallbackContext, restaurants: list) -> None:
         for restaurant in restaurants:

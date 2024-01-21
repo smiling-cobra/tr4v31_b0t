@@ -1,6 +1,6 @@
 import os
 import requests
-from common import get_lobby_keyboard
+from common import get_lobby_keyboard, get_city_name
 from messages import WELCOME_MESSAGE_CONCISE
 from telegram import Update, ReplyKeyboardRemove
 from commands import Landmarks, Restauraunts, Weather, Stories, BackCommand, HelpCommand, Tips, Phrases, VenuePhotoRetriever
@@ -32,12 +32,12 @@ openai_helper = OpenAIHelper()
 venue_photo_retriever = VenuePhotoRetriever(client_id, client_secret, foursquare_auth_key)
 
 user_choice_to_command = {
-    TOURIST_ATTRACTIONS: Landmarks(),
+    TOURIST_ATTRACTIONS: Landmarks(get_city_name),
     WEATHER_FORECAST: Weather(),
-    AFFORDABLE_EATS: Restauraunts(venue_photo_retriever),
+    AFFORDABLE_EATS: Restauraunts(venue_photo_retriever, get_city_name),
     LOCAL_PHRASES: Phrases(),
-    TRAVEL_TIPS: Tips(),
-    FIVE_FACTS: Stories(openai_helper),
+    TRAVEL_TIPS: Tips(openai_helper, get_city_name),
+    FIVE_FACTS: Stories(openai_helper, get_city_name),
     HELP: HelpCommand(),
     BACK: BackCommand()
 }
@@ -59,6 +59,7 @@ def fetch_city_data(city_name: str, google_api_key: str, geocoding_api_url: str,
 
     if response_status == 'OK':
         city_data = data.get('results')
+        print('City data: ', city_data)
         context.user_data['city_data'] = city_data
         return city_data
     else:

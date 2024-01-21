@@ -10,10 +10,12 @@ from messages import create_welcome_landmarks_message, SHOW_MORE_LANDMARKS_MESSA
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 
 class Landmarks(Command):
+    def __init__(self, get_city_name):
+        self.get_city_name = get_city_name
+        
     def execute(self, update: Update, context: CallbackContext) -> None:
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
         city_name = self.get_city_name(context)
-        # landmarks = self.get_landmarks(city_name)
         places = self.get_places(city_name)
         context.user_data['landmarks'] = places
         update.message.reply_text(create_welcome_landmarks_message(user_name, city_name), reply_markup=self.get_landmark_keyboard())
@@ -89,14 +91,7 @@ class Landmarks(Command):
         more_landmarks_button = KeyboardButton(SHOW_MORE_LANDMARKS_MESSAGE)
         keyboard = [[back_to_lobby_button], [more_landmarks_button]]
         return ReplyKeyboardMarkup(keyboard)
-    
-    def get_city_name(self, context: CallbackContext) -> str:
-        city_data = context.user_data.get('city_data')[0]
-        address_components = city_data.get('address_components')[0]
-        city_name = address_components.get('long_name')
-        return city_name
-    
-    
+        
     def post_landmarks(self, update: Update, context: CallbackContext, landmarks: list) -> None:
         for landmark in landmarks:
             landmark_name = landmark.get('name')                
