@@ -24,6 +24,7 @@ class Stories(Command):
             city_facts = ""
         
         if city_facts:
+            context.user_data['city_facts'] = city_facts
             update.message.reply_text(f"Here are some facts about {city_name}:")
             update.message.reply_text(city_facts)
         else:
@@ -31,15 +32,16 @@ class Stories(Command):
         
     def get_facts(self, prompt: str) -> str:
         try:
-            response = response = self.openai_helper.get_response(prompt)
+            response = self.openai_helper.get_response(prompt)
             return self.get_response(response)
         except Exception as e:
+            # Improved error logging
             print(f"An error occurred: {e}")
             return ""
     
     def get_response(self, response: str) -> dict:
         if response and response['choices']:
-            message = response['choices'][0]['message']['content']
-            return message
+            return response['choices'][0]['message']['content']
         else:
+            print(f"An error occurred while making response in Stories: {e}")
             return {}

@@ -16,11 +16,15 @@ class Landmarks(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
         city_name = self.get_city_name(context)
-        places = self.get_places(city_name)
-        context.user_data['landmarks'] = places
-        update.message.reply_text(create_welcome_landmarks_message(user_name, city_name), reply_markup=self.get_landmark_keyboard())
         
-        self.post_landmarks(update, context, places)
+        places = self.get_places(city_name)
+        context.user_data['city_landmarks'] = places
+        
+        if places:
+            update.message.reply_text(create_welcome_landmarks_message(user_name, city_name), reply_markup=self.get_landmark_keyboard())
+            self.post_landmarks(update, places)
+        else:
+            update.message.reply_text(f"Sorry, I couldn't find any landmarks in {city_name}!")
     
     def get_places(self, city_name: str) -> list:
         GOOGLE_PLACES_API_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
@@ -85,6 +89,7 @@ class Landmarks(Command):
         google_maps_link = f'https://www.google.com/maps/search/?api=1&query={html.escape(address)}'
         return f'<a href="{google_maps_link}">{html.escape(address)}</a>'
     
+    # Refactor this method and move to common.py
     def get_landmark_keyboard(self) -> InlineKeyboardMarkup:
         # Return the InlineKeyboardMarkup with the "Back to Lobby" button
         back_to_lobby_button = KeyboardButton("🔙 Back")
@@ -92,7 +97,7 @@ class Landmarks(Command):
         keyboard = [[back_to_lobby_button], [more_landmarks_button]]
         return ReplyKeyboardMarkup(keyboard)
         
-    def post_landmarks(self, update: Update, context: CallbackContext, landmarks: list) -> None:
+    def post_landmarks(self, update: Update, landmarks: list) -> None:
         for landmark in landmarks:
             landmark_name = landmark.get('name')                
             landmark_location = landmark.get('formatted_address')
