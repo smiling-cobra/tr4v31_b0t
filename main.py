@@ -1,11 +1,15 @@
 import os
 import logging
+import requests
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 from handlers import GroupMessageHandler, UserDialogueHelper
 from messages import HELP_WELCOME_MESSAGE
+from services import CityDataService
 
 telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
+geocoding_api_url = os.environ.get('GEOCODING_API_URL')
+google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 
 # Configure the logging settings
 logging.basicConfig(
@@ -30,6 +34,13 @@ def help(update: Update, context: CallbackContext):
 def setup_error_handler(dispatcher):
     # Errors
     dispatcher.add_error_handler(error)
+    
+
+city_data_service = CityDataService(
+    requests,
+    google_map_api_key,
+    geocoding_api_url
+)
 
 
 def main() -> None:
@@ -40,7 +51,10 @@ def main() -> None:
 
     setup_error_handler(dispatcher)
 
-    conversation_handler = UserDialogueHelper(dispatcher)
+    conversation_handler = UserDialogueHelper(
+        dispatcher,
+        city_data_service
+    )
     conversation_handler.setup()
 
     group_message_handler = GroupMessageHandler(dispatcher)
