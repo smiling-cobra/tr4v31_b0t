@@ -3,10 +3,32 @@ import requests
 from common import get_lobby_keyboard, get_city_name, get_option_keyboard
 from messages import WELCOME_MESSAGE_CONCISE
 from telegram import Update, ReplyKeyboardRemove
-from commands import Landmarks, Restauraunts, Weather, Stories, BackCommand, HelpCommand, Tips, Phrases, VenuePhotoRetriever
-from telegram.ext import CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+from commands import (
+    Landmarks,
+    Restauraunts,
+    Weather,
+    Stories,
+    BackCommand,
+    HelpCommand,
+    Tips,
+    Phrases,
+    VenuePhotoRetriever
+)
+from telegram.ext import (
+    CommandHandler,
+    MessageHandler,
+    Filters,
+    CallbackContext,
+    ConversationHandler
+)
 from services import OpenAIHelper
-from messages import NO_CITY_FOUND_MESSAGE, DEFAULT_USER_NAME, create_initial_greeting_message, create_wrong_input_message, create_farewell_message
+from messages import (
+    NO_CITY_FOUND_MESSAGE,
+    DEFAULT_USER_NAME,
+    create_initial_greeting_message,
+    create_wrong_input_message,
+    create_farewell_message
+)
 
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 geocoding_api_url = os.environ.get('GEOCODING_API_URL')
@@ -29,12 +51,20 @@ HELP = '❓ Help'
 BACK = '🔙 Back'
 
 openai_helper = OpenAIHelper()
-venue_photo_retriever = VenuePhotoRetriever(client_id, client_secret, foursquare_auth_key)
+
+venue_photo_retriever = VenuePhotoRetriever(
+    client_id, client_secret,
+    foursquare_auth_key
+)
 
 user_choice_to_command = {
     TOURIST_ATTRACTIONS: Landmarks(get_city_name, get_option_keyboard),
     WEATHER_FORECAST: Weather(get_city_name, get_option_keyboard),
-    AFFORDABLE_EATS: Restauraunts(venue_photo_retriever, get_city_name),
+    AFFORDABLE_EATS: Restauraunts(
+        venue_photo_retriever,
+        get_city_name,
+        get_option_keyboard
+    ),
     LOCAL_PHRASES: Phrases(),
     TRAVEL_TIPS: Tips(openai_helper, get_city_name),
     FIVE_FACTS: Stories(openai_helper, get_city_name),
@@ -42,7 +72,14 @@ user_choice_to_command = {
     BACK: BackCommand()
 }
 
-def fetch_city_data(city_name: str, google_api_key: str, geocoding_api_url: str, context: CallbackContext):
+
+def fetch_city_data(
+        city_name: str,
+        google_api_key: str,
+        geocoding_api_url: str,
+        context: CallbackContext
+):
+
     req_params = {
         "address": city_name,
         "key": google_api_key
@@ -54,7 +91,7 @@ def fetch_city_data(city_name: str, google_api_key: str, geocoding_api_url: str,
         data = response.json()
     except ValueError as e:
         return f"Error parsing JSON: {e}"
-    
+
     response_status = data.get('status')
 
     if response_status == 'OK':
@@ -65,14 +102,25 @@ def fetch_city_data(city_name: str, google_api_key: str, geocoding_api_url: str,
     else:
         return f"No city was found! Status: {response_status}"
 
+
 class UserDialogueHelper:
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher
-        
-    def handle_initial_user_input(self, update: Update, context: CallbackContext):
+
+    def handle_initial_user_input(
+        self,
+        update: Update,
+        context: CallbackContext
+    ):
         user_input = update.message.text.capitalize()
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
-        city_data = fetch_city_data(user_input, google_map_api_key, geocoding_api_url, context)
+
+        city_data = fetch_city_data(
+            user_input,
+            google_map_api_key,
+            geocoding_api_url,
+            context
+        )
 
         if city_data == CITY_REQUEST_ERROR_TEXT:
             update.message.reply_text(NO_CITY_FOUND_MESSAGE)
@@ -82,7 +130,7 @@ class UserDialogueHelper:
                 reply_markup=get_lobby_keyboard()
             )
             return LOBBY
-        
+
     def handle_lobby_choice(self, update: Update, context: CallbackContext):
         user_choice = update.message.text
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
@@ -92,7 +140,7 @@ class UserDialogueHelper:
             command.execute(update, context)
         else:
             update.message.reply_text(create_wrong_input_message(user_name))
-            
+
     def start(self, update: Update, context: CallbackContext):
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
         welcome_message = WELCOME_MESSAGE_CONCISE.format(user_name)
@@ -101,18 +149,36 @@ class UserDialogueHelper:
 
     def cancel(self, update: Update, context: CallbackContext):
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
-        update.message.reply_text(create_farewell_message(user_name), reply_markup=ReplyKeyboardRemove())
+
+        update.message.reply_text(
+            create_farewell_message(user_name),
+            reply_markup=ReplyKeyboardRemove()
+        )
+
         return ConversationHandler.END
-    
+
     def setup(self):
-        # Create the ConversationHandler to handle the onboarding process and lobby choices
+        # Create the ConversationHandler to handle
+        # the onboarding process and lobby choices
+
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', self.start)],
             states={
-                DESTINATION: [MessageHandler(Filters.text & ~Filters.command, self.handle_initial_user_input)],
-                LOBBY: [MessageHandler(Filters.text & ~Filters.command, self.handle_lobby_choice)]
+                DESTINATION: [
+                    MessageHandler(
+                        Filters.text & ~Filters.command,
+                        self.handle_initial_user_input
+                    )
+                ],
+                LOBBY: [
+                    MessageHandler(
+                        Filters.text & ~Filters.command,
+                        self.handle_lobby_choice
+                    )
+                ]
             },
             fallbacks=[CommandHandler('cancel', self.cancel)]
         )
+
         # Add the ConversationHandler to the dispatcher
         self.dispatcher.add_handler(conv_handler)

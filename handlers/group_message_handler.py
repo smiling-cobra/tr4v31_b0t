@@ -1,5 +1,6 @@
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+from telegram import Update
+from telegram.ext import MessageHandler, Filters, CallbackContext
+
 
 class GroupMessageHandler:
     def __init__(self, dispatcher):
@@ -12,11 +13,11 @@ class GroupMessageHandler:
         text = message.text
 
         print('Handling group message...!!!!!')
-        
+
         # Check if the bot is mentioned in the group chat
         if f"@{context.bot.username}" in text:
             # Process the message following the mention
-            response_text = process_group_message(text, chat.id)
+            # response_text = process_group_message(text, chat.id)
             # Send a reply to the group
             message.reply_text(response_text)
         else:
@@ -26,4 +27,9 @@ class GroupMessageHandler:
             pass
 
     def setup(self):
-        self.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, self.group_message_handler))
+        self.dispatcher.add_handler(
+            MessageHandler(
+                Filters.text & ~Filters.command,
+                self.group_message_handler
+            )
+        )

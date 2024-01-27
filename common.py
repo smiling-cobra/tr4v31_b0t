@@ -1,6 +1,9 @@
-from telegram import KeyboardButton, ReplyKeyboardMarkup, Update, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
-
+from telegram import (
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    InlineKeyboardMarkup
+)
 
 TOURIST_ATTRACTIONS = '🗽 Sites'
 WEATHER_FORECAST = '☀️ Weather'
@@ -20,7 +23,11 @@ def get_lobby_keyboard():
     ]
 
     keyboard = [[KeyboardButton(option) for option in row] for row in options]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    return ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
 
 
 def get_city_name(context: CallbackContext) -> str:
