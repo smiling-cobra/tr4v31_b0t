@@ -20,7 +20,7 @@ from telegram.ext import (
     CallbackContext,
     ConversationHandler
 )
-from services import OpenAIHelper, CityDataService
+from services import OpenAIHelper
 from messages import (
     NO_CITY_FOUND_MESSAGE,
     DEFAULT_USER_NAME,
@@ -82,35 +82,35 @@ class UserDialogueHelper:
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
 
         city_data = self.city_data_service.fetch_city_data(user_input)
-        
+
         if not city_data:
             update.message.reply_text(
                 NO_CITY_FOUND_MESSAGE.format(user_name),
                 reply_markup=ReplyKeyboardRemove()
             )
             return ConversationHandler.END
-        
+
         # Save city data in context
         context.user_data['city_data'] = city_data
-        
+
         city_name = (
             city_data[0]
-                .get('address_components')[0]
-                    .get('long_name')
+            .get('address_components')[0]
+            .get('long_name')
         )
-        
+
         update.message.reply_text(
             create_initial_greeting_message(user_name, city_name),
             reply_markup=get_lobby_keyboard()
         )
-        
+
         return LOBBY
 
     def handle_lobby_choice(self, update: Update, context: CallbackContext):
         user_choice = update.message.text
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
         command = user_choice_to_command.get(user_choice)
-    
+
         if command:
             command.execute(update, context)
         else:

@@ -34,7 +34,7 @@ def help(update: Update, context: CallbackContext):
 def setup_error_handler(dispatcher):
     # Errors
     dispatcher.add_error_handler(error)
-    
+
 
 city_data_service = CityDataService(
     requests,
