@@ -8,3 +8,16 @@ from .back_command import BackCommand
 from .landmarks_command import Landmarks
 from .restauraunts_command import Restauraunts
 from .venue_photo_retriever import VenuePhotoRetriever
+
+__all__ = [
+    'Command',
+    'Tips',
+    'Phrases',
+    'Weather',
+    'Stories',
+    'HelpCommand',
+    'BackCommand',
+    'Landmarks',
+    'Restauraunts',
+    'VenuePhotoRetriever'
+]
