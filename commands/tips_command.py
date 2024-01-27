@@ -2,6 +2,13 @@ from commands import Command
 from telegram import Update
 from telegram.ext import CallbackContext
 
+tips_dictionary = {
+    "PROMPT": "Kindly share your valuable travel insights and tips for exploring the enchanting city of {}",
+    "ERROR": "Sorry, I couldn't suggest any tips for {} travel!",
+    "WELCOME": "🌍 Ready for some travel tips about {}? Let's get started!",
+    "CITY_NOT_FOUND": "Sorry, I couldn't find any travel tips for {}!",
+}
+
 class Tips(Command):
     # OpenAIHelper and get_city_name are dependencies
     # injected into the Tips command in user_dialogue_helper
@@ -11,19 +18,18 @@ class Tips(Command):
         
     def execute(self, update: Update, context: CallbackContext) -> None:
         city_name = self.get_city_name(context)
-        prompt = f"Provide me with some useful travel tips for {city_name}"
         
         if city_name:
-            travel_tips = self.get_tips(prompt)
+            travel_tips = self.get_tips(tips_dictionary['PROMPT'].format(city_name)) 
         else:
-            update.message.reply_text(f"Entshuldigung, there's something wrong with the city name {city_name}!")
+            update.message.reply_text(tips_dictionary['CITY_NOT_FOUND'].format(city_name))
         
         if travel_tips:
-            update.message.reply_text(f"Here are some travel tips for {city_name}:")
+            update.message.reply_text(tips_dictionary['WELCOME'].format(city_name))
             context.user_data['city_tips'] = travel_tips
             update.message.reply_text(travel_tips)
         else:
-            update.message.reply_text(f"Sorry, I couldn't suggest any tips for {city_name} travel!")
+            update.message.reply_text(tips_dictionary['ERROR'].format(city_name))
     
     def get_tips(self, prompt: str) -> str:
         try:

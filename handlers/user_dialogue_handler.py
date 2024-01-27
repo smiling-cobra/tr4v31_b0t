@@ -1,6 +1,6 @@
 import os
 import requests
-from common import get_lobby_keyboard, get_city_name
+from common import get_lobby_keyboard, get_city_name, get_option_keyboard
 from messages import WELCOME_MESSAGE_CONCISE
 from telegram import Update, ReplyKeyboardRemove
 from commands import Landmarks, Restauraunts, Weather, Stories, BackCommand, HelpCommand, Tips, Phrases, VenuePhotoRetriever
@@ -32,8 +32,8 @@ openai_helper = OpenAIHelper()
 venue_photo_retriever = VenuePhotoRetriever(client_id, client_secret, foursquare_auth_key)
 
 user_choice_to_command = {
-    TOURIST_ATTRACTIONS: Landmarks(get_city_name),
-    WEATHER_FORECAST: Weather(),
+    TOURIST_ATTRACTIONS: Landmarks(get_city_name, get_option_keyboard),
+    WEATHER_FORECAST: Weather(get_city_name, get_option_keyboard),
     AFFORDABLE_EATS: Restauraunts(venue_photo_retriever, get_city_name),
     LOCAL_PHRASES: Phrases(),
     TRAVEL_TIPS: Tips(openai_helper, get_city_name),

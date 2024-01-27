@@ -3,16 +3,28 @@ import requests
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 from commands import Command
+from messages import TELL_ME_MORE_ABOUT_WEATHER_MESSAGE, create_weather_message
 
 weather_api_key = os.environ.get('OPEN_WEATHER_API_KEY')
 
 class Weather(Command):
+    def __init__(self, get_city_name, get_option_keyboard):
+        self.get_city_name = get_city_name
+        self.get_weather_keyboard = get_option_keyboard
+        
     def execute(self, update: Update, context: CallbackContext) -> None:
+        user_name = update.message.chat.first_name or DEFAULT_USER_NAME
+        
+        city_name = self.get_city_name(context)
         city_coordinates = self.get_city_coordinates(context)
+        
         weather_now = self.get_weather_forecast(city_coordinates)
         weather_desc = weather_now.get('daily')[0].get('summary')
-        update.message.reply_text(f'Here is the weather forecast for your destination: {weather_desc}', reply_markup=self.get_weather_keyboard())
-        pass
+        
+        update.message.reply_text(
+            create_weather_message(user_name, city_name, weather_desc),
+            reply_markup=self.get_weather_keyboard(TELL_ME_MORE_ABOUT_WEATHER_MESSAGE)
+        )
 
     def get_city_coordinates(self, context: CallbackContext) -> str:
         city_data = context.user_data.get('city_data')[0]
@@ -33,10 +45,3 @@ class Weather(Command):
             return weather_data
         else:
             return []
-    
-    def get_weather_keyboard(self) -> InlineKeyboardMarkup:
-        # Return the InlineKeyboardMarkup with the "Back to Lobby" button
-        back_to_lobby_button = KeyboardButton("🔙 Back")
-        more_landmarks_button = KeyboardButton("☀️ Tell me more about current weather!")
-        keyboard = [[back_to_lobby_button], [more_landmarks_button]]
-        return ReplyKeyboardMarkup(keyboard)

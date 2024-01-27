@@ -26,7 +26,10 @@ class Restauraunts(Command):
         # Save the restaurants in the user's context
         context.user_data['city_restauraunts'] = restaurants
         
-        update.message.reply_text(create_welcome_restaurants_message(user_name, city_name), reply_markup=self.get_affordable_eats_keyboard(context))
+        update.message.reply_text(
+            create_welcome_restaurants_message(user_name, city_name),
+            reply_markup=self.get_affordable_eats_keyboard(context)
+        )
         self.post_restauraunts(update, restaurants)
     
     def format_address_as_link(self, address: str):
@@ -35,9 +38,11 @@ class Restauraunts(Command):
     
     def get_affordable_eats_keyboard(self, context: CallbackContext) -> InlineKeyboardMarkup:
         city_name = self.get_city_name(context)
-        return ReplyKeyboardMarkup([[KeyboardButton("🔙 Back")], [KeyboardButton(f"🥗 Show me more restaurants in {city_name}!")]])
+        return ReplyKeyboardMarkup(
+            [[KeyboardButton("🔙 Back")],
+             [KeyboardButton(f"🥗 Show me more restaurants in {city_name}!")]]
+        )
         
-    # https://location.foursquare.com/developer/reference/response-fields
     def get_restauraunts(self, city_name: str) -> list:
         params = {
             'client_id': client_id,

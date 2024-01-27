@@ -7,6 +7,11 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Callb
 from common import get_lobby_keyboard
 from commands import Command
 
+stories_dictionary = {
+    "PROMPT": "Share please some fascinating facts about {}",
+    "ERROR": "Sorry, I couldn't find any facts about {}!",
+    "WELCOME": "🤓 Sure thing! Let me share some fascinating facts about {} with you."
+}
 
 class Stories(Command):
     # OpenAIHelper and get_city_name are dependencies
@@ -19,16 +24,18 @@ class Stories(Command):
         city_name = self.get_city_name(context)
         
         if city_name:
-            city_facts = self.get_facts(f"Tell me some interesting facts about {city_name}")
+            
+            city_facts = self.get_facts(stories_dictionary['PROMPT'].format(city_name))
         else:
+            print(f"An error occurred: No city name found!")
             city_facts = ""
         
         if city_facts:
             context.user_data['city_facts'] = city_facts
-            update.message.reply_text(f"Here are some facts about {city_name}:")
+            update.message.reply_text(stories_dictionary['WELCOME'].format(city_name))
             update.message.reply_text(city_facts)
         else:
-            update.message.reply_text(f"Sorry, I couldn't find any facts about {city_name}!")
+            update.message.reply_text(stories_dictionary['ERROR'].format(city_name))
         
     def get_facts(self, prompt: str) -> str:
         try:
@@ -36,7 +43,7 @@ class Stories(Command):
             return self.get_response(response)
         except Exception as e:
             # Improved error logging
-            print(f"An error occurred: {e}")
+            print(f"An error while get_facts {e}")
             return ""
     
     def get_response(self, response: str) -> dict:

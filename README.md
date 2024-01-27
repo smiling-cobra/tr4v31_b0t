@@ -4,3 +4,6 @@
 
 ### Run container
     docker-compose up
+
+### Foursquare docs
+    https://location.foursquare.com/developer/reference/response-fields

@@ -10,8 +10,9 @@ from messages import create_welcome_landmarks_message, SHOW_MORE_LANDMARKS_MESSA
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 
 class Landmarks(Command):
-    def __init__(self, get_city_name):
+    def __init__(self, get_city_name, get_option_keyboard):
         self.get_city_name = get_city_name
+        self.get_landmark_keyboard = get_option_keyboard
         
     def execute(self, update: Update, context: CallbackContext) -> None:
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
@@ -21,7 +22,10 @@ class Landmarks(Command):
         context.user_data['city_landmarks'] = places
         
         if places:
-            update.message.reply_text(create_welcome_landmarks_message(user_name, city_name), reply_markup=self.get_landmark_keyboard())
+            update.message.reply_text(
+                create_welcome_landmarks_message(user_name, city_name),
+                reply_markup=self.get_landmark_keyboard(SHOW_MORE_LANDMARKS_MESSAGE)
+            )
             self.post_landmarks(update, places)
         else:
             update.message.reply_text(f"Sorry, I couldn't find any landmarks in {city_name}!")
@@ -88,14 +92,6 @@ class Landmarks(Command):
     def format_address_as_link(self, address: str):
         google_maps_link = f'https://www.google.com/maps/search/?api=1&query={html.escape(address)}'
         return f'<a href="{google_maps_link}">{html.escape(address)}</a>'
-    
-    # Refactor this method and move to common.py
-    def get_landmark_keyboard(self) -> InlineKeyboardMarkup:
-        # Return the InlineKeyboardMarkup with the "Back to Lobby" button
-        back_to_lobby_button = KeyboardButton("🔙 Back")
-        more_landmarks_button = KeyboardButton(SHOW_MORE_LANDMARKS_MESSAGE)
-        keyboard = [[back_to_lobby_button], [more_landmarks_button]]
-        return ReplyKeyboardMarkup(keyboard)
         
     def post_landmarks(self, update: Update, landmarks: list) -> None:
         for landmark in landmarks:
@@ -109,30 +105,3 @@ class Landmarks(Command):
             landmark_location_as_link = self.format_address_as_link(landmark_location)
             message_text = f"{landmark_name}\n{landmark_location_as_link}"
             update.message.reply_text(message_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-            
-
-    # def get_landmarks(self, city_name: str) -> list:
-    #     version = date.today().strftime("%Y%m%d")
-
-    #     params = {
-    #         'client_id': client_id,
-    #         'client_secret': client_secret,
-    #         'v': version,
-    #         'near': city_name,
-    #         'query': 'landmarks',
-    #         'limit': 5,
-    #         'fields' :'name,location'
-    #     }
-
-    #     headers = {
-    #         "accept": "application/json",
-    #         "Authorization": "fsq3EspygHQ4vVEBDjCoZ/j/Jz23u08mtTLHp66gpA0idio="
-    #     }
-
-    #     response = requests.get(base_url, params=params, headers=headers)
-
-    #     if response.status_code == 200:
-    #         data_list = response.json()
-    #         return data_list
-    #     else:
-    #         return []
