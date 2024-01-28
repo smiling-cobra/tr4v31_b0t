@@ -62,7 +62,7 @@ user_choice_to_command = {
     ),
     LOCAL_PHRASES: Phrases(),
     TRAVEL_TIPS: Tips(openai_helper, get_city_name),
-    FIVE_FACTS: Stories(openai_helper, get_city_name),
+    FIVE_FACTS: Stories(openai_helper, get_city_name, get_option_keyboard),
     HELP: HelpCommand(),
     BACK: BackCommand()
 }
