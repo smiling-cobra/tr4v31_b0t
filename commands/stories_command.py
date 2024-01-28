@@ -25,8 +25,6 @@ class Stories(Command):
         city_facts = self.get_facts(
             stories_dictionary['PROMPT'].format(city_name)
         )
-        
-        print("city_facts", city_facts)
 
         if city_facts:
             self.handle_stories_found(update, context, city_name, city_facts)

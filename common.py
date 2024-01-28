@@ -10,7 +10,7 @@ WEATHER_FORECAST = '☀️ Weather'
 AFFORDABLE_EATS = '🥗 Eats'
 LOCAL_PHRASES = '🗣 Phrases'
 TRAVEL_TIPS = '🎯 Tips'
-FIVE_FACTS = '🎲 Stories'
+STORIES = '🎲 Stories'
 HELP = '❓ Help'
 BACK = '🔙 Back'
 
@@ -18,7 +18,7 @@ BACK = '🔙 Back'
 def get_lobby_keyboard():
     options = [
         [TOURIST_ATTRACTIONS, WEATHER_FORECAST, AFFORDABLE_EATS],
-        [LOCAL_PHRASES, TRAVEL_TIPS, FIVE_FACTS],
+        [LOCAL_PHRASES, TRAVEL_TIPS, STORIES],
         [HELP, BACK]
     ]
 

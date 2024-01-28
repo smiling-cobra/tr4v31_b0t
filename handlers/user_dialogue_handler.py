@@ -40,7 +40,7 @@ TOURIST_ATTRACTIONS = '🗽 Sites'
 WEATHER_FORECAST = '☀️ Weather'
 AFFORDABLE_EATS = '🥗 Eats'
 LOCAL_PHRASES = '🗣 Phrases'
-FIVE_FACTS = '🎲 Stories'
+STORIES = '🎲 Stories'
 TRAVEL_TIPS = '🎯 Tips'
 HELP = '❓ Help'
 BACK = '🔙 Back'
@@ -53,16 +53,30 @@ venue_photo_retriever = VenuePhotoRetriever(
 )
 
 user_choice_to_command = {
-    TOURIST_ATTRACTIONS: Landmarks(get_city_name, get_option_keyboard),
-    WEATHER_FORECAST: Weather(get_city_name, get_option_keyboard),
+    TOURIST_ATTRACTIONS: Landmarks(
+        get_city_name,
+        get_option_keyboard
+    ),
+    WEATHER_FORECAST: Weather(
+        get_city_name,
+        get_option_keyboard
+    ),
     AFFORDABLE_EATS: Restauraunts(
         venue_photo_retriever,
         get_city_name,
         get_option_keyboard
     ),
     LOCAL_PHRASES: Phrases(),
-    TRAVEL_TIPS: Tips(openai_helper, get_city_name),
-    FIVE_FACTS: Stories(openai_helper, get_city_name, get_option_keyboard),
+    TRAVEL_TIPS: Tips(
+        openai_helper,
+        get_city_name,
+        get_option_keyboard
+    ),
+    STORIES: Stories(
+        openai_helper,
+        get_city_name,
+        get_option_keyboard
+    ),
     HELP: HelpCommand(),
     BACK: BackCommand()
 }
