@@ -1,6 +1,6 @@
 from .base_command import Command
 from .tips_command import Tips
-from .phrases_command import Phrases
+from .events_command import Events
 from .weather_command import Weather
 from .stories_command import Stories
 from .help_command import HelpCommand
@@ -12,7 +12,7 @@ from .venue_photo_retriever import VenuePhotoRetriever
 __all__ = [
     'Command',
     'Tips',
-    'Phrases',
+    'Events',
     'Weather',
     'Stories',
     'HelpCommand',

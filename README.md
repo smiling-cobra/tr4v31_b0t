@@ -14,3 +14,6 @@
 
 ### Foursquare docs
     https://location.foursquare.com/developer/reference/response-fields
+
+### Ticketmaster docs
+    https://developer.ticketmaster.com/products-and-docs/apis/discovery-api/v2/#search-events-v2

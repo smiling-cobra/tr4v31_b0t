@@ -42,8 +42,7 @@ class Weather(Command):
     def get_weather_forecast(self, city_coordinates: dict) -> list:
         lat = city_coordinates.get("lat")
         lon = city_coordinates.get("lng")
-        appid = '23f15497c341cb62b6878982f298236f'
-        weather_url = f'https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={appid}'
+        weather_url = f'https://api.openweathermap.org/data/3.0/onecall?lat={lat}&lon={lon}&appid={weather_api_key}'
 
         response = requests.get(weather_url)
 

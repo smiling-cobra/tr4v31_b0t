@@ -8,7 +8,7 @@ from telegram import (
 TOURIST_ATTRACTIONS = '🗽 Sites'
 WEATHER_FORECAST = '☀️ Weather'
 AFFORDABLE_EATS = '🥗 Eats'
-LOCAL_PHRASES = '🗣 Phrases'
+EVENTS = '⭐ Events'
 TRAVEL_TIPS = '🎯 Tips'
 STORIES = '🎲 Stories'
 HELP = '❓ Help'
@@ -18,7 +18,7 @@ BACK = '🔙 Back'
 def get_lobby_keyboard():
     options = [
         [TOURIST_ATTRACTIONS, WEATHER_FORECAST, AFFORDABLE_EATS],
-        [LOCAL_PHRASES, TRAVEL_TIPS, STORIES],
+        [EVENTS, TRAVEL_TIPS, STORIES],
         [HELP, BACK]
     ]
 

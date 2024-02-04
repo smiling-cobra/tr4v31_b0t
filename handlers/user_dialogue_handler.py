@@ -10,7 +10,7 @@ from commands import (
     BackCommand,
     HelpCommand,
     Tips,
-    Phrases,
+    Events,
     VenuePhotoRetriever
 )
 from telegram.ext import (
@@ -39,7 +39,7 @@ DESTINATION, LOBBY = range(2)
 TOURIST_ATTRACTIONS = '🗽 Sites'
 WEATHER_FORECAST = '☀️ Weather'
 AFFORDABLE_EATS = '🥗 Eats'
-LOCAL_PHRASES = '🗣 Phrases'
+EVENTS = '⭐ Events'
 STORIES = '🎲 Stories'
 TRAVEL_TIPS = '🎯 Tips'
 HELP = '❓ Help'
@@ -66,7 +66,10 @@ user_choice_to_command = {
         get_city_name,
         get_option_keyboard
     ),
-    LOCAL_PHRASES: Phrases(),
+    EVENTS: Events(
+        get_city_name,
+        get_option_keyboard
+    ),
     TRAVEL_TIPS: Tips(
         openai_helper,
         get_city_name,
@@ -123,8 +126,10 @@ class UserDialogueHelper:
     def handle_lobby_choice(self, update: Update, context: CallbackContext):
         user_choice = update.message.text
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
+        print('user_choice ====>', user_choice)
         command = user_choice_to_command.get(user_choice)
-
+        print('command ====>', command)
+        
         if command:
             command.execute(update, context)
         else:
