@@ -1,4 +1,0 @@
-2024-02-05 19:13:29,726 - services.logging_service - INFO - Application start
-2024-02-05 19:13:29,728 - services.logging_service - INFO - Polling...
-2024-02-05 19:13:29,730 - apscheduler.scheduler - INFO - Scheduler started
-Scheduler started

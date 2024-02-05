@@ -3,3 +3,6 @@
 
 # Ignore .git files
 .git
+
+# Ignore logs
+app.log*
