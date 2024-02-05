@@ -20,7 +20,7 @@ from telegram.ext import (
     CallbackContext,
     ConversationHandler
 )
-from services import OpenAIHelper
+from services import OpenAIHelper, LoggingService
 from messages import (
     NO_CITY_FOUND_MESSAGE,
     DEFAULT_USER_NAME,
@@ -36,6 +36,14 @@ foursquare_auth_key = os.environ.get('FOURSQUARE_API_KEY')
 
 DESTINATION, LOBBY = range(2)
 
+openai_helper = OpenAIHelper()
+logger = LoggingService()
+
+venue_photo_retriever = VenuePhotoRetriever(
+    client_id, client_secret,
+    foursquare_auth_key
+)
+
 TOURIST_ATTRACTIONS = '🗽 Sites'
 WEATHER_FORECAST = '☀️ Weather'
 AFFORDABLE_EATS = '🥗 Eats'
@@ -44,13 +52,6 @@ STORIES = '🎲 Stories'
 TRAVEL_TIPS = '🎯 Tips'
 HELP = '❓ Help'
 BACK = '🔙 Back'
-
-openai_helper = OpenAIHelper()
-
-venue_photo_retriever = VenuePhotoRetriever(
-    client_id, client_secret,
-    foursquare_auth_key
-)
 
 user_choice_to_command = {
     TOURIST_ATTRACTIONS: Landmarks(
@@ -68,7 +69,8 @@ user_choice_to_command = {
     ),
     EVENTS: Events(
         get_city_name,
-        get_option_keyboard
+        get_option_keyboard,
+        logger
     ),
     TRAVEL_TIPS: Tips(
         openai_helper,
@@ -109,15 +111,11 @@ class UserDialogueHelper:
 
         # Save city data in context
         context.user_data['city_data'] = city_data
-
-        city_name = (
-            city_data[0]
-            .get('address_components')[0]
-            .get('long_name')
-        )
+                
+        destination = city_data[0].get('formatted_address')
 
         update.message.reply_text(
-            create_initial_greeting_message(user_name, city_name),
+            create_initial_greeting_message(user_name, destination),
             reply_markup=get_lobby_keyboard()
         )
 
@@ -126,9 +124,7 @@ class UserDialogueHelper:
     def handle_lobby_choice(self, update: Update, context: CallbackContext):
         user_choice = update.message.text
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
-        print('user_choice ====>', user_choice)
         command = user_choice_to_command.get(user_choice)
-        print('command ====>', command)
         
         if command:
             command.execute(update, context)
