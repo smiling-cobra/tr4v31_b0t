@@ -7,7 +7,7 @@ class CacheService:
         if key in context.user_data:
             copied_data = context.user_data.get(key)[:]
             random.shuffle(copied_data)
-            random_items = copied_data[:5]
+            random_items = copied_data[:7]
 
             return random_items
         return {}

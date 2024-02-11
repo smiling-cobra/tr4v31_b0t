@@ -1,6 +1,5 @@
 import os
 import html
-import random
 import requests
 from telegram import Update, ParseMode
 from telegram.ext import CallbackContext
@@ -9,6 +8,7 @@ from messages import (
     create_welcome_restaurants_message,
     DEFAULT_USER_NAME
 )
+from services import CacheService
 
 client_id = os.environ.get('FOURSQUARE_CLIENT_ID')
 client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
@@ -32,7 +32,7 @@ class Restauraunts(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
         user_name = update.message.chat.first_name or DEFAULT_USER_NAME
         city_name = self.get_city_name(context)
-        restaurants = self.get_restauraunts(city_name)
+        restaurants = self.get_restauraunts(city_name, context)
 
         # Save the restaurants in the user's context
         context.user_data['city_restauraunts'] = restaurants
@@ -49,7 +49,17 @@ class Restauraunts(Command):
         google_maps_link = f'https://www.google.com/maps/search/?api=1&query={html.escape(address)}'
         return f'<a href="{google_maps_link}">{html.escape(address)}</a>'
 
-    def get_restauraunts(self, city_name: str) -> list:
+    def get_restauraunts(self, city_name: str, context: CallbackContext) -> list:
+        restauraunts_cache_key = 'city_restauraunts'
+        cache_service = CacheService()
+        cached_restauraunts = cache_service.get(
+            restauraunts_cache_key,
+            context
+        )
+
+        if cached_restauraunts:
+            return cached_restauraunts
+
         params = {
             'client_id': client_id,
             'client_secret': client_secret,
@@ -64,30 +74,22 @@ class Restauraunts(Command):
             "Authorization": foursquare_auth_key
         }
 
-        response = requests.get(base_url, params=params, headers=headers)
+        response = requests.get(
+            base_url,
+            params=params,
+            headers=headers
+        )
+
+        try:
+            data = response.json()
+        except ValueError as e:
+            return []
+            print(f"Error parsing JSON: {e}")
 
         if response.status_code == 200:
-            data = response.json()
-            venues = data.get('results')
+            venues = data.get('results', [])
 
-            # Debugging: Check if venues is a list
-            if not isinstance(venues, list):
-                print(f"Expected 'venues' to be a list, got: {type(venues)}")
-                return []
-
-            # Debugging: Print the length of venues before shuffling
-            print(f"Number of venues before shuffling: {len(venues)}")
-
-            # Shuffle the venues
-            random.shuffle(venues)
-
-            # Take only the first 7 venues from the shuffled list
-            selected_venues = venues[:7]
-
-            # Debugging: Print the length of venues after shuffling
-            print(f"Number of venues after shuffling: {len(venues)}")
-
-            for venue in selected_venues:
+            for venue in venues:
                 venue_id = venue.get('fsq_id')
                 if venue_id:
                     venue['photo'] = self.photo_retriever.get_venue_photos(
@@ -96,7 +98,13 @@ class Restauraunts(Command):
                 else:
                     print("Venue ID not found for a venue")
 
-            return selected_venues
+            cache_service.set(
+                restauraunts_cache_key,
+                venues,
+                context
+            )
+
+            return venues[:7]
         else:
             print("get_restauraunts failed")
             return []

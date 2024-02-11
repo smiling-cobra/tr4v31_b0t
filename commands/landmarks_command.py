@@ -44,7 +44,8 @@ class Landmarks(Command):
 
     def get_places(self, city_name: str, context: CallbackContext) -> list:
         cache_service = CacheService()
-        cached_data = cache_service.get('city_landmarks', context)
+        places_cache_key = 'city_landmarks'
+        cached_data = cache_service.get(places_cache_key, context)
         
         if cached_data:
             return cached_data
@@ -70,8 +71,13 @@ class Landmarks(Command):
             composed_places_list = self.compose_places_list(
                 data.get('results', [])
             )            
-            cache_service.set('city_landmarks', composed_places_list, context)
-            return cache_service.get('city_landmarks', context)
+            cache_service.set(
+                places_cache_key,
+                composed_places_list,
+                context
+            )
+            
+            return composed_places_list[:7]
         else:
             return f"No places were found! Status: {response_status}"
 
