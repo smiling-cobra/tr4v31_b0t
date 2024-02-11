@@ -14,7 +14,12 @@ class SingletonMeta(type):
 
 
 class LoggingService(metaclass=SingletonMeta):
-    def __init__(self, log_file='app.log', level=logging.INFO, max_bytes=10000, backup_count=5):
+    def __init__(
+        self, log_file='app.log',
+        level=logging.INFO,
+        max_bytes=10000,
+        backup_count=5
+    ):
         if not hasattr(self, 'is_initialized'):
             self.log_file = log_file
             self.level = level
@@ -22,7 +27,7 @@ class LoggingService(metaclass=SingletonMeta):
             self.backup_count = backup_count
             self.setup_logging()
             self.is_initialized = True
-    
+
     def setup_logging(self):
         # Sets up the logging configuration
         logging.basicConfig(
@@ -31,13 +36,13 @@ class LoggingService(metaclass=SingletonMeta):
             filename=self.log_file,
             filemode='w'
         )
-        
+
         handler = RotatingFileHandler(
             self.log_file,
             maxBytes=self.max_bytes,
             backupCount=self.backup_count
         )
-        
+
         logging.getLogger('').addHandler(handler)
 
     def log(self, level, message):

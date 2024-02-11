@@ -37,7 +37,7 @@ city_data_service = CityDataService(
 def main() -> None:
     updater = Updater(telegram_bot_token, use_context=True)
     dispatcher = updater.dispatcher
-    
+
     logger = LoggingService()
     logger.log('info', 'Application start')
 

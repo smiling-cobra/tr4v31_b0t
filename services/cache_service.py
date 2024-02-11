@@ -21,6 +21,6 @@ class CacheService:
 
     def clear(self):
         self.cache.clear()
-    
+
     def randomize(self, key: str, context: CallbackContext):
         pass
