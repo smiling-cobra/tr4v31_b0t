@@ -9,11 +9,12 @@ from messages import (
      SHOW_MORE_LANDMARKS_MESSAGE,
      DEFAULT_USER_NAME
 )
+from services import CacheService
 
 google_map_api_key = os.environ.get('GOOGLE_MAP_API_KEY')
 google_places_api_url = os.environ.get('GOOGLE_PLACES_API_URL')
 
-landmarks_dict = {
+landmarks_texts = {
     'PLACES_ERROR': "Sorry, I couldn't find any landmarks in {}!",
 }
 
@@ -24,13 +25,11 @@ class Landmarks(Command):
         self.get_landmark_keyboard = get_option_keyboard
 
     def execute(self, update: Update, context: CallbackContext) -> None:
-        user_name = update.message.chat.first_name or DEFAULT_USER_NAME
         city_name = self.get_city_name(context)
-
-        places = self.get_places(city_name)
-        context.user_data['city_landmarks'] = places
+        places = self.get_places(city_name, context)
 
         if places:
+            user_name = update.message.chat.first_name or DEFAULT_USER_NAME
             update.message.reply_text(
                 create_welcome_landmarks_message(user_name, city_name),
                 reply_markup=self.get_landmark_keyboard(
@@ -40,12 +39,16 @@ class Landmarks(Command):
             self.post_landmarks(update, places)
         else:
             update.message.reply_text(
-                landmarks_dict['PLACES_ERROR'].format(city_name)
+                landmarks_texts['PLACES_ERROR'].format(city_name)
             )
 
-    def get_places(self, city_name: str) -> list:
-        GOOGLE_PLACES_API_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-
+    def get_places(self, city_name: str, context: CallbackContext) -> list:
+        cache_service = CacheService()
+        cached_data = cache_service.get('city_landmarks', context)
+        
+        if cached_data:
+            return cached_data
+        
         params = {
             'query': f"landmarks in {city_name}",
             'inputtype': 'textquery',
@@ -53,7 +56,7 @@ class Landmarks(Command):
             'key': google_map_api_key
         }
 
-        response = requests.get(GOOGLE_PLACES_API_URL, params=params)
+        response = requests.get(google_places_api_url, params=params)
 
         try:
             data = response.json()
@@ -64,11 +67,11 @@ class Landmarks(Command):
         response_status = data.get('status')
 
         if response_status == 'OK':
-            places = data.get('results', [])
-            places_list = self.compose_places_list(places)
-            # Limit the number of places to 5 for now
-            places_list_limited = places_list[:5]
-            return places_list_limited
+            composed_places_list = self.compose_places_list(
+                data.get('results', [])
+            )            
+            cache_service.set('city_landmarks', composed_places_list, context)
+            return cache_service.get('city_landmarks', context)
         else:
             return f"No places were found! Status: {response_status}"
 
