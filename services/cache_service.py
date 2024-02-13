@@ -4,6 +4,9 @@ from telegram.ext import CallbackContext
 
 class CacheService:
     def get(self, key: str, context: CallbackContext) -> dict:
+        if key == 'city_forecast':
+            return context.user_data.get(key)
+        
         if key in context.user_data:
             copied_data = context.user_data.get(key)[:]
             random.shuffle(copied_data)

@@ -34,9 +34,6 @@ class Restauraunts(Command):
         city_name = self.get_city_name(context)
         restaurants = self.get_restauraunts(city_name, context)
 
-        # Save the restaurants in the user's context
-        context.user_data['city_restauraunts'] = restaurants
-
         update.message.reply_text(
             create_welcome_restaurants_message(user_name, city_name),
             reply_markup=self.get_rest_keyboard(
