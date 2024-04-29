@@ -6,7 +6,6 @@ stories_dictionary = {
     "PROMPT": "Share please some fascinating facts about {}",
     "ERROR": "Sorry, I couldn't find any facts about {}!",
     "WELCOME": "🤓 Sure thing! Let me share some fascinating facts about {} with you.",
-    'FOLLOWING_QUESTION': "🎲 Show me more stories in {}!"
 }
 
 
@@ -50,9 +49,7 @@ class Stories(Command):
         self.send_reply(
             update,
             city_facts,
-            reply_markup=self.get_stories_keyboard(
-                stories_dictionary['FOLLOWING_QUESTION'].format(city_name)
-            )
+            reply_markup=self.get_stories_keyboard()
         )
 
     def send_reply(

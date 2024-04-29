@@ -19,7 +19,7 @@ def get_lobby_keyboard():
     options = [
         [TOURIST_ATTRACTIONS, WEATHER_FORECAST, AFFORDABLE_EATS],
         [EVENTS, TRAVEL_TIPS, STORIES],
-        [HELP, BACK]
+        [HELP]
     ]
 
     keyboard = [[KeyboardButton(option) for option in row] for row in options]
@@ -37,8 +37,6 @@ def get_city_name(context: CallbackContext) -> str:
     return city_name
 
 
-def get_option_keyboard(message: str) -> InlineKeyboardMarkup:
-    back_button = KeyboardButton("🔙 Back")
-    show_more_button = KeyboardButton(message)
-    keyboard = [[back_button], [show_more_button]]
+def get_option_keyboard() -> InlineKeyboardMarkup:
+    keyboard = [[KeyboardButton(BACK)]]
     return ReplyKeyboardMarkup(keyboard)

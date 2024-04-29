@@ -15,10 +15,6 @@ client_secret = os.environ.get('FOURSQUARE_CLIENT_SECRET')
 base_url = os.environ.get('FOURSQSARE_API_URL')
 foursquare_auth_key = os.environ.get('FOURSQUARE_API_KEY')
 
-rest_dict = {
-    'FOLLOWING_QUESTION': "🥗 Show me more restaurants in {}!"
-}
-
 
 # Refactor this class.
 # Extract restaraunt fetching logic
@@ -36,9 +32,7 @@ class Restauraunts(Command):
 
         update.message.reply_text(
             create_welcome_restaurants_message(user_name, city_name),
-            reply_markup=self.get_rest_keyboard(
-                rest_dict['FOLLOWING_QUESTION'].format(city_name)
-            )
+            reply_markup=self.get_rest_keyboard()
         )
         self.post_restauraunts(update, restaurants)
 

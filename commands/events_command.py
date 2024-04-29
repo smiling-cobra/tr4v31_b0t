@@ -28,9 +28,7 @@ class Events(Command):
                 
                 update.message.reply_text(
                     'Cool! Would you like to see more events? 🎉🎉🎉',
-                    reply_markup=self.get_events_keyboard(
-                        events_dict['FOLLOWING_QUESTION'].format(city_name)
-                    )
+                    reply_markup=self.get_events_keyboard()
                 )
             else:
                 update.message.reply_text("No events found for your city. 😢")

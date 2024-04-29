@@ -13,51 +13,57 @@ from services import CacheService
 weather_api_key = os.environ.get('OPEN_WEATHER_API_KEY')
 weather_api_url = os.environ.get('OPEN_WEATHER_API_URL')
 
+forecast_cache_key = 'city_forecast'
 
 class Weather(Command):
-    def __init__(self, get_city_name, get_option_keyboard):
+    def __init__(self, get_city_name, get_option_keyboard, logger):
         self.get_city_name = get_city_name
         self.get_weather_keyboard = get_option_keyboard
+        self.logger = logger
 
     def execute(self, update: Update, context: CallbackContext) -> None:
-        user_name = update.message.chat.first_name or DEFAULT_USER_NAME
-        city_name = self.get_city_name(context)
-        city_coordinates = self.get_city_coordinates(context)
+        self.post_weather_forecast(update, context)
 
-        weather_now = self.get_forecast(city_coordinates, context)
-        weather_desc = weather_now.get('daily')[0].get('summary')
-
+    def post_weather_forecast(self, update: Update, context: CallbackContext):
         update.message.reply_text(
-            create_weather_message(user_name, city_name, weather_desc),
-            reply_markup=self.get_weather_keyboard(
-                TELL_ME_MORE_ABOUT_WEATHER_MESSAGE
-            )
+            create_weather_message(
+                update.message.chat.first_name or DEFAULT_USER_NAME,
+                self.get_city_name(context),
+                self.prepare_weather_summary(update, context)
+            ),
+            reply_markup=self.get_weather_keyboard()
         )
+    
+    def prepare_weather_summary(self, update: Update, context: CallbackContext):
+        city_coordinates = self.get_city_coordinates(context)
+        weather_forecast = self.get_weather_forecast(city_coordinates, context)
+        return weather_forecast.get('daily')[0].get('summary')
 
     def get_city_coordinates(self, context: CallbackContext) -> str:
         city_data = context.user_data.get('city_data')[0]
-        lat = city_data.get('geometry').get('location').get('lat')
-        lng = city_data.get('geometry').get('location').get('lng')
-        return {'lat': lat, 'lng': lng}
+        return {
+            'lat': city_data.get('geometry').get('location').get('lat'),
+            'lng': city_data.get('geometry').get('location').get('lng')
+        }
 
-    def get_forecast(
+    def get_weather_forecast(
         self,
         city_coordinates: dict,
         context: CallbackContext
     ) -> list:
-        forecast_cache_key = 'city_forecast'
         cache_service = CacheService()
-        cached_forecast = cache_service.get(forecast_cache_key, context)
-        
+
+        cached_forecast = cache_service.get(
+            forecast_cache_key,
+            context
+        )
+
         if cached_forecast:
             return cached_forecast
-        
-        lat = city_coordinates.get("lat")
-        lon = city_coordinates.get("lng")
-        
+
         weather_url = weather_api_url.format(
-            lat=lat,
-            lon=lon,
+            lat=city_coordinates.get("lat"),
+            lon=city_coordinates.get("lng"),
             weather_api_key=weather_api_key
         )
 
@@ -65,13 +71,13 @@ class Weather(Command):
 
         if response.status_code == 200:
             weather_data = response.json()
-            
+
             cache_service.set(
                 forecast_cache_key,
                 weather_data,
                 context
             )
-            
+
             return weather_data
         else:
             return []

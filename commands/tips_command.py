@@ -7,7 +7,6 @@ tips_dictionary = {
     "ERROR": "Sorry, I couldn't suggest any tips for {} travel!",
     "WELCOME": "🌍 Ready for some travel tips about {}? Let's get started!",
     "CITY_NOT_FOUND": "Sorry, I couldn't find any travel tips for {}!",
-    'FOLLOWING_QUESTION': "🎲 Show me more tips in {}!"
 }
 
 
@@ -28,9 +27,7 @@ class Tips(Command):
                 self.send_reply(
                     update,
                     city_tips,
-                    reply_markup=self.get_tips_keyboard(
-                        tips_dictionary['FOLLOWING_QUESTION'].format(city_name)
-                    )
+                    reply_markup=self.get_tips_keyboard()
                 )
                 return
 

@@ -60,7 +60,8 @@ user_choice_to_command = {
     ),
     WEATHER_FORECAST: Weather(
         get_city_name,
-        get_option_keyboard
+        get_option_keyboard,
+        logger
     ),
     AFFORDABLE_EATS: Restauraunts(
         venue_photo_retriever,

@@ -6,7 +6,6 @@ from telegram.ext import CallbackContext
 from commands import Command
 from messages import (
      create_welcome_landmarks_message,
-     SHOW_MORE_LANDMARKS_MESSAGE,
      DEFAULT_USER_NAME
 )
 from services import CacheService
@@ -32,9 +31,7 @@ class Landmarks(Command):
             user_name = update.message.chat.first_name or DEFAULT_USER_NAME
             update.message.reply_text(
                 create_welcome_landmarks_message(user_name, city_name),
-                reply_markup=self.get_landmark_keyboard(
-                    SHOW_MORE_LANDMARKS_MESSAGE
-                )
+                reply_markup=self.get_landmark_keyboard()
             )
             self.post_landmarks(update, places)
         else:
