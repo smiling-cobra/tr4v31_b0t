@@ -4,7 +4,7 @@ from telegram.ext import CallbackContext
 
 class CacheService:
     def get(self, key: str, context: CallbackContext) -> dict:
-        if key == 'city_forecast':
+        if key == 'city_forecast' or key == 'city_facts':
             return context.user_data.get(key)
         
         if key in context.user_data:
