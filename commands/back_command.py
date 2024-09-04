@@ -4,6 +4,7 @@ from telegram.ext import CallbackContext
 from common import get_lobby_keyboard
 from messages import create_following_question_message, DEFAULT_USER_NAME
 
+DESTINATION, LOBBY = range(2)
 
 class BackCommand(Command):
     def execute(self, update: Update, context: CallbackContext) -> None:
