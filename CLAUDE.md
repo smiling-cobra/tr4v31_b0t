@@ -33,6 +33,7 @@ User (Telegram) → Handlers → Services → LLM / DB
 **Entry point**: `main.py` — creates the Telegram `Updater`, registers handlers, starts polling.
 
 **Conversation flow** (`bot/handlers/journal.py`):
+
 - `ONBOARDING_NAME` → `ONBOARDING_TIMEZONE` → `ONBOARDING_TIME`: first-time setup, collects name, timezone, reminder time, saves to DB with `onboarded=True`
 - `MAIN_MENU`: persistent menu (Check In, History, Stats, Help)
 - `CHECK_IN_MOOD`: user rates mood 1–10
@@ -49,10 +50,11 @@ User (Telegram) → Handlers → Services → LLM / DB
 | `messages/strings.py` | All user-facing message templates |
 
 **LLM integration** (`LlmService`):
+
 - `get_empathetic_response(mood_score, entry_text)` — 2-3 paragraph empathetic reply
 - `extract_tags(entry_text)` — returns up to 5 comma-separated theme tags
 - `get_weekly_summary(entries)` — weekly pattern summary (Phase 4)
-- All calls use `claude-sonnet-4-20250514`, `max_tokens=512`
+- Model is configured via `ANTHROPIC_MODEL` (default `claude-3-5-sonnet-latest`), `max_tokens=512`
 
 **Streak logic** (`JournalService._update_streak`): increments if last check-in was yesterday, resets to 1 if gap > 1 day, no-ops if already checked in today.
 
@@ -62,6 +64,7 @@ User (Telegram) → Handlers → Services → LLM / DB
 TELEGRAM_TOKEN
 CLAUDE_API_KEY
 MONGODB_URI
+ANTHROPIC_MODEL (optional)
 ```
 
 ## Roadmap Status

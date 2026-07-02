@@ -17,6 +17,15 @@ Copy `.env.example` to `.env` and fill in the values:
 TELEGRAM_TOKEN=
 CLAUDE_API_KEY=
 MONGODB_URI=
+ANTHROPIC_MODEL=claude-3-5-sonnet-latest
+```
+
+`ANTHROPIC_MODEL` is optional. If not set, the app falls back to `claude-3-5-sonnet-latest`.
+
+For Fly.io deployments, set or update the model with:
+
+```bash
+fly secrets set ANTHROPIC_MODEL=<your-enabled-model-id>
 ```
 
 ## Run
