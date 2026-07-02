@@ -10,13 +10,19 @@ import pytest
 
 from services.llm_service import LlmService
 
+DEFAULT_MODEL = 'claude-3-5-sonnet-latest'
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _svc() -> LlmService:
-    with patch.dict('os.environ', {'CLAUDE_API_KEY': 'test-key'}):
+def _svc(model: str | None = None) -> LlmService:
+    env = {'CLAUDE_API_KEY': 'test-key'}
+    if model is not None:
+        env['ANTHROPIC_MODEL'] = model
+
+    with patch.dict('os.environ', env, clear=True):
         svc = LlmService()
     svc._client = MagicMock()
     return svc
@@ -139,3 +145,27 @@ class TestCallMaxTokens:
         svc.extract_tags('had a tough day at work')
         _, kwargs = svc._client.messages.create.call_args
         assert kwargs['max_tokens'] == 512
+
+
+# ---------------------------------------------------------------------------
+# model selection
+# ---------------------------------------------------------------------------
+
+class TestModelSelection:
+    def test_uses_model_from_environment(self):
+        svc = _svc(model='claude-test-model')
+        svc._client.messages.create.return_value = _mock_response('response')
+
+        svc.get_empathetic_response(7, 'good day')
+
+        _, kwargs = svc._client.messages.create.call_args
+        assert kwargs['model'] == 'claude-test-model'
+
+    def test_uses_default_model_when_environment_missing(self):
+        svc = _svc()
+        svc._client.messages.create.return_value = _mock_response('response')
+
+        svc.get_empathetic_response(7, 'good day')
+
+        _, kwargs = svc._client.messages.create.call_args
+        assert kwargs['model'] == DEFAULT_MODEL
