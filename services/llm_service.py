@@ -5,7 +5,7 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_MODEL = 'claude-3-5-sonnet-latest'
+_DEFAULT_MODEL = 'claude-haiku-4-5'
 
 
 class LlmService:
