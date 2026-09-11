@@ -37,6 +37,8 @@ from messages.strings import (
     ONBOARDING_TIME as ONBOARDING_TIME_MSG,
     ONBOARDING_TIMEZONE as ONBOARDING_TIMEZONE_MSG,
     ONBOARDING_WELCOME,
+    PRIVACY_ACCEPTED_PROMPT,
+    PRIVACY_NOTICE,
     STATS_EMPTY,
     STATS_MESSAGE,
     WEEKLY_SUMMARY_EMPTY,
@@ -109,6 +111,8 @@ def start(update: Update, context: CallbackContext) -> int:
         )
         return MAIN_MENU
     update.message.reply_text(ONBOARDING_WELCOME)
+    update.message.reply_text(PRIVACY_NOTICE, parse_mode='Markdown')
+    update.message.reply_text(PRIVACY_ACCEPTED_PROMPT)
     return ONBOARDING_NAME
 
 

@@ -11,6 +11,7 @@ It is the source of truth for product concepts and boundaries, not coding style 
 
 In scope:
 
+- A disclosure, shown before onboarding and repeatable on demand, of how entry text is stored and processed
 - First-time onboarding through name, timezone, and reminder-time setup
 - Daily check-ins with a mood score and free-text journal entry
 - Empathetic LLM responses to journal entries
@@ -55,7 +56,9 @@ Out of scope:
 
 1. Onboarding workflow
 
-- A new user starts the bot and is asked for their name.
+- A new user starts the bot and is shown what happens to what they write — storage, the third-party model call, the absence of end-to-end encryption, and the limits of the product — before being asked for anything.
+- The same notice stays reachable afterwards through a dedicated command.
+- A new user is then asked for their name.
 - The bot collects a timezone from a shared location or a manually entered IANA timezone.
 - The bot collects a daily reminder time in HH:MM 24-hour format.
 - The user is marked onboarded and returned to the main menu.

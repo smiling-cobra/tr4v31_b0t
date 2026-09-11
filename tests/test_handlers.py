@@ -16,6 +16,7 @@ from bot.handlers.journal import (
     CHECK_IN_MOOD,
     CHECK_IN_TEXT,
     MAIN_MENU,
+    ONBOARDING_NAME,
     ONBOARDING_TIME,
     ONBOARDING_TIMEZONE,
     handle_entry_text,
@@ -27,6 +28,7 @@ from bot.handlers.journal import (
     show_history,
     show_stats,
     show_weekly_summary,
+    start,
 )
 from messages.strings import GUIDANCE_CRISIS_RESOURCES
 
@@ -552,6 +554,52 @@ class TestCrisisResourceDelivery:
         from messages.strings import HELP_MESSAGE
         assert 'iasp.info' in HELP_MESSAGE
         assert '116 123' in HELP_MESSAGE
+
+
+# ---------------------------------------------------------------------------
+# Consent notice
+#
+# Entry text leaves the product for a third-party API. That has to be disclosed
+# before the first entry is written, and stay reachable afterwards.
+# ---------------------------------------------------------------------------
+
+class TestPrivacyNotice:
+    def test_new_user_sees_it_before_being_asked_anything(self):
+        from messages.strings import PRIVACY_NOTICE
+        update = _update('/start')
+        with patch('bot.handlers.journal._user_svc') as mock_svc:
+            mock_svc.get.return_value = None
+            result = start(update, _context())
+        sent = [c.args[0] for c in update.message.reply_text.call_args_list]
+        assert PRIVACY_NOTICE in sent
+        assert result == ONBOARDING_NAME
+
+    def test_returning_user_is_not_shown_it_again(self):
+        from messages.strings import PRIVACY_NOTICE
+        update = _update('/start')
+        with patch('bot.handlers.journal._user_svc') as mock_svc:
+            mock_svc.get.return_value = {'name': 'Alice', 'onboarded': True}
+            result = start(update, _context())
+        sent = [c.args[0] for c in update.message.reply_text.call_args_list]
+        assert PRIVACY_NOTICE not in sent
+        assert result == MAIN_MENU
+
+    def test_privacy_command_repeats_it(self):
+        from bot.handlers.commands import privacy_command
+        from messages.strings import PRIVACY_NOTICE
+        update = _update('/privacy')
+        privacy_command(update, _context())
+        assert update.message.reply_text.call_args.args[0] == PRIVACY_NOTICE
+
+    def test_help_points_at_it(self):
+        from messages.strings import HELP_MESSAGE
+        assert '/privacy' in HELP_MESSAGE
+
+    def test_welcome_makes_no_bare_privacy_claim(self):
+        """The bot forwards entry text to a third-party API, so 'private
+        anxiety journal' was an inaccurate opening line, not just a legal gap."""
+        from messages.strings import ONBOARDING_WELCOME
+        assert 'private' not in ONBOARDING_WELCOME.lower()
 
 
 # ---------------------------------------------------------------------------
