@@ -28,6 +28,7 @@ from bot.handlers.journal import (
     show_stats,
     show_weekly_summary,
 )
+from messages.strings import GUIDANCE_CRISIS_RESOURCES
 
 
 # ---------------------------------------------------------------------------
@@ -499,6 +500,95 @@ class TestHandleEntryTextGuidance:
 
 
 # ---------------------------------------------------------------------------
+# Crisis-resource delivery guarantee
+#
+# Resources must reach an acutely low-mood user unconditionally: not behind an
+# opt-in, and not downstream of a DB or LLM call that can fail.
+# ---------------------------------------------------------------------------
+
+class TestCrisisResourceDelivery:
+    def _sent(self, update) -> list:
+        return [c.args[0] for c in update.message.reply_text.call_args_list]
+
+    def _run(self, mood_score: int, svc_error: Exception | None = None) -> MagicMock:
+        ctx = _context({'name': 'Alice', 'mood_score': mood_score})
+        update = _update('I feel awful')
+        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
+             patch('bot.handlers.journal._llm_svc') as mock_llm:
+            if svc_error is not None:
+                mock_llm.extract_tags.side_effect = svc_error
+            else:
+                mock_llm.extract_tags.return_value = []
+            mock_svc.get_stats.return_value = {'streak': 1, 'total': 1, 'avg_mood': mood_score}
+            mock_llm.get_empathetic_response.return_value = 'Hang in there.'
+            handle_entry_text(update, ctx)
+        return update
+
+    def test_score_2_receives_crisis_resources(self):
+        update = self._run(2)
+        assert GUIDANCE_CRISIS_RESOURCES in self._sent(update)
+
+    def test_score_1_receives_crisis_resources(self):
+        update = self._run(1)
+        assert GUIDANCE_CRISIS_RESOURCES in self._sent(update)
+
+    def test_score_3_does_not_receive_crisis_resources(self):
+        update = self._run(3)
+        assert GUIDANCE_CRISIS_RESOURCES not in self._sent(update)
+
+    def test_delivered_even_when_the_check_in_fails(self):
+        """The regression this fix exists for: a Mongo or LLM failure used to
+        return ERROR_GENERIC and MAIN_MENU, skipping the crisis path entirely."""
+        update = self._run(1, svc_error=Exception('DB down'))
+        assert GUIDANCE_CRISIS_RESOURCES in self._sent(update)
+
+    def test_delivered_before_anything_that_can_fail(self):
+        update = self._run(1)
+        assert self._sent(update)[0] == GUIDANCE_CRISIS_RESOURCES
+
+    def test_help_message_carries_crisis_resources(self):
+        """/help is reachable mid-conversation, so it is the escape hatch that
+        survives lost conversation state."""
+        from messages.strings import HELP_MESSAGE
+        assert 'iasp.info' in HELP_MESSAGE
+        assert '116 123' in HELP_MESSAGE
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed handling of a missing mood score
+# ---------------------------------------------------------------------------
+
+class TestMissingMoodScore:
+    def test_entry_text_re_asks_instead_of_assuming(self):
+        update = _update('I feel awful')
+        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
+             patch('bot.handlers.journal._llm_svc') as mock_llm:
+            result = handle_entry_text(update, _context({'name': 'Alice'}))
+        assert result == CHECK_IN_MOOD
+        mock_svc.save_entry.assert_not_called()
+        mock_llm.extract_tags.assert_not_called()
+
+    def test_entry_text_tells_the_user_it_was_not_saved(self):
+        from messages.strings import MOOD_LOST
+        update = _update('I feel awful')
+        with patch('bot.handlers.journal._journal_svc'), \
+             patch('bot.handlers.journal._llm_svc'):
+            handle_entry_text(update, _context({'name': 'Alice'}))
+        assert update.message.reply_text.call_args.args[0] == MOOD_LOST
+
+    def test_guidance_offer_shows_crisis_resources(self):
+        """This state is only reachable from a low-mood check-in, so a missing
+        score means lost state rather than a well user."""
+        from bot.keyboards import GUIDANCE_NO
+        update = _update(GUIDANCE_NO)
+        with patch('bot.handlers.journal._llm_svc'):
+            result = handle_guidance_offer(update, _context({'entry_text': 'rough'}))
+        sent = [c.args[0] for c in update.message.reply_text.call_args_list]
+        assert GUIDANCE_CRISIS_RESOURCES in sent
+        assert result == MAIN_MENU
+
+
+# ---------------------------------------------------------------------------
 # Phase 6 — guidance offer handler
 # ---------------------------------------------------------------------------
 
@@ -535,19 +625,19 @@ class TestHandleGuidanceOffer:
         result = handle_guidance_offer(_update('random text'), self._ctx())
         assert result == MAIN_MENU
 
-    def test_very_low_mood_appends_crisis_resources(self):
+    def test_crisis_resources_are_not_repeated_here(self):
+        """handle_entry_text now delivers them unconditionally at mood <= 2,
+        before this opt-in is ever offered. See TestCrisisResourceDelivery."""
         from bot.keyboards import GUIDANCE_YES
-        from messages.strings import GUIDANCE_CRISIS_RESOURCES
         update = _update(GUIDANCE_YES)
         with patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try cold water.'
             handle_guidance_offer(update, self._ctx(mood_score=2))
-        sent_text = update.message.reply_text.call_args.args[0]
-        assert GUIDANCE_CRISIS_RESOURCES in sent_text
+        sent = [c.args[0] for c in update.message.reply_text.call_args_list]
+        assert GUIDANCE_CRISIS_RESOURCES not in sent
 
     def test_score_3_does_not_append_crisis_resources(self):
         from bot.keyboards import GUIDANCE_YES
-        from messages.strings import GUIDANCE_CRISIS_RESOURCES
         update = _update(GUIDANCE_YES)
         with patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try deep breathing.'

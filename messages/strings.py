@@ -76,7 +76,13 @@ HELP_MESSAGE = (
     "*/history* — Show your recent entries\n"
     "*/stats* — Show your stats\n"
     "*/summary* — Show your weekly mood summary\n"
-    "*/cancel* — End the current session"
+    "*/cancel* — End the current session\n\n"
+    "———\n"
+    "I'm a journalling tool, not a crisis service or a substitute for "
+    "professional care. If you need urgent support:\n"
+    "• *International crisis centres*: iasp.info/resources/Crisis\\_Centres\n"
+    "• *Crisis Text Line* (US/UK/CA/IE): text HOME to 741741\n"
+    "• *Samaritans* (UK/IE): 116 123"
 )
 
 ERROR_GENERIC = "Something went wrong. Please try again."
@@ -104,6 +110,13 @@ GUIDANCE_CRISIS_RESOURCES = (
     "• *International crisis centres*: iasp.info/resources/Crisis\\_Centres\n"
     "• *Crisis Text Line* (US/UK/CA/IE): text HOME to 741741\n"
     "• *Samaritans* (UK/IE): 116 123"
+)
+
+MOOD_LOST = (
+    "Sorry — I've lost track of the rating that goes with this entry, "
+    "so I haven't saved it yet.\n\n"
+    "Could you rate your mood from 1 to 10 again? "
+    "I'll ask for your entry straight after."
 )
 
 WEEKLY_SUMMARY_EMPTY = (
