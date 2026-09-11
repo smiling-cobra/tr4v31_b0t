@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  lint-and-test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint
+        run: flake8
+
+      - name: Test
+        run: pytest -q
+        env:
+          # bot/handlers/journal.py constructs LlmService at import time, which
+          # raises unless a key is present. No API call is made: every test
+          # patches the client. MONGODB_URI is not needed — conftest.py swaps
+          # the database for mongomock before any test runs.
+          CLAUDE_API_KEY: not-a-real-key-tests-patch-the-client

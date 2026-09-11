@@ -14,7 +14,7 @@ from telegram.ext import (
 from timezonefinder import TimezoneFinder
 
 from bot.keyboards import (
-    CHECK_IN, GUIDANCE_NO, GUIDANCE_YES, HELP, HISTORY, STATS, WEEKLY_SUMMARY,
+    CHECK_IN, GUIDANCE_YES, HELP, HISTORY, STATS, WEEKLY_SUMMARY,
     get_guidance_keyboard, get_main_menu_keyboard, get_mood_keyboard, get_timezone_keyboard,
 )
 from messages.strings import (
@@ -25,7 +25,6 @@ from messages.strings import (
     ERROR_GENERIC,
     GUIDANCE_CRISIS_RESOURCES,
     GUIDANCE_DECLINED,
-    GUIDANCE_ERROR_MESSAGE,
     GUIDANCE_OFFER_LOW,
     GUIDANCE_OFFER_VERY_LOW,
     HELP_MESSAGE,
@@ -33,10 +32,13 @@ from messages.strings import (
     HISTORY_ENTRY,
     HISTORY_HEADER,
     MAIN_MENU_MESSAGE,
+    MOOD_LOST,
     ONBOARDING_DONE,
     ONBOARDING_TIME as ONBOARDING_TIME_MSG,
     ONBOARDING_TIMEZONE as ONBOARDING_TIMEZONE_MSG,
     ONBOARDING_WELCOME,
+    PRIVACY_ACCEPTED_PROMPT,
+    PRIVACY_NOTICE,
     STATS_EMPTY,
     STATS_MESSAGE,
     WEEKLY_SUMMARY_EMPTY,
@@ -62,7 +64,10 @@ _MD_SPECIAL = re.compile(r'([_*`\[])')
 
 
 def _escape_md(text: str) -> str:
+    """Escape Markdown v1 special characters in user-supplied or external text."""
     return _MD_SPECIAL.sub(r'\\\1', text)
+
+
 _tf = TimezoneFinder()
 _ALL_TIMEZONES = sorted(available_timezones())
 
@@ -72,16 +77,19 @@ def _search_timezones(query: str) -> list:
     needle = query.strip().replace(' ', '_').lower()
     return [tz for tz in _ALL_TIMEZONES if needle in tz.lower()]
 
-ONBOARDING_NAME, ONBOARDING_TIMEZONE, ONBOARDING_TIME, MAIN_MENU, CHECK_IN_MOOD, CHECK_IN_TEXT, CHECK_IN_GUIDANCE_OFFER = range(7)
+
+(
+    ONBOARDING_NAME,
+    ONBOARDING_TIMEZONE,
+    ONBOARDING_TIME,
+    MAIN_MENU,
+    CHECK_IN_MOOD,
+    CHECK_IN_TEXT,
+    CHECK_IN_GUIDANCE_OFFER,
+) = range(7)
 
 LOW_MOOD_THRESHOLD = 4
-
-
-def _escape_md(text: str) -> str:
-    """Escape Markdown v1 special characters in user-supplied or external text."""
-    for char in ('*', '_', '`', '['):
-        text = text.replace(char, f'\\{char}')
-    return text
+CRISIS_MOOD_THRESHOLD = 2
 
 _user_svc = UserService()
 _journal_svc = JournalService()
@@ -103,6 +111,8 @@ def start(update: Update, context: CallbackContext) -> int:
         )
         return MAIN_MENU
     update.message.reply_text(ONBOARDING_WELCOME)
+    update.message.reply_text(PRIVACY_NOTICE, parse_mode='Markdown')
+    update.message.reply_text(PRIVACY_ACCEPTED_PROMPT)
     return ONBOARDING_NAME
 
 
@@ -227,11 +237,30 @@ def handle_mood(update: Update, context: CallbackContext) -> int:
     return CHECK_IN_TEXT
 
 
+def _send_crisis_resources(update: Update) -> None:
+    """Deliver crisis resources. Never gated on an opt-in, a DB call or an LLM call."""
+    update.message.reply_text(GUIDANCE_CRISIS_RESOURCES, parse_mode='Markdown')
+
+
 def handle_entry_text(update: Update, context: CallbackContext) -> int:
     text = update.message.text.strip()
     telegram_id = update.effective_user.id
-    mood_score = context.user_data.get('mood_score', 5)
+    mood_score = context.user_data.get('mood_score')
     name = _name(context)
+
+    # Fail closed: without the score we cannot tell a 1 from a 9, and assuming
+    # a middling default silently skips both the guidance offer and the crisis
+    # path. Re-ask instead.
+    if mood_score is None:
+        logger.warning('handle_entry_text: mood_score missing for user %s', telegram_id)
+        update.message.reply_text(MOOD_LOST, reply_markup=get_mood_keyboard())
+        return CHECK_IN_MOOD
+
+    # Before the try block on purpose. Everything below can fail — a Mongo
+    # blip, an Anthropic timeout — and the except returns to the main menu,
+    # so anything downstream of it is not a guarantee.
+    if mood_score <= CRISIS_MOOD_THRESHOLD:
+        _send_crisis_resources(update)
 
     try:
         tags = _llm_svc.extract_tags(text)
@@ -361,19 +390,24 @@ def show_weekly_summary(update: Update, context: CallbackContext) -> int:
 
 
 def handle_guidance_offer(update: Update, context: CallbackContext) -> int:
+    mood_score = context.user_data.get('mood_score')
+
+    # This state is only reachable from a low-mood check-in, so a missing score
+    # means lost state, not a well user. Fail closed and show resources.
+    if mood_score is None:
+        logger.warning('handle_guidance_offer: mood_score missing for user %s', update.effective_user.id)
+        _send_crisis_resources(update)
+        mood_score = CRISIS_MOOD_THRESHOLD
+
     if update.message.text != GUIDANCE_YES:
         update.message.reply_text(GUIDANCE_DECLINED, reply_markup=get_main_menu_keyboard())
         return MAIN_MENU
 
-    mood_score = context.user_data.get('mood_score', 5)
     entry_text = context.user_data.get('entry_text', '')
     if not entry_text:
         logger.warning('handle_guidance_offer: entry_text missing for user %s', update.effective_user.id)
 
     guidance = _llm_svc.get_psychological_guidance(mood_score, entry_text)
-
-    if mood_score <= 2:
-        guidance = guidance + '\n\n' + GUIDANCE_CRISIS_RESOURCES
 
     update.message.reply_text(guidance, reply_markup=get_main_menu_keyboard())
     return MAIN_MENU

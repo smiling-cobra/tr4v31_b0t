@@ -8,6 +8,20 @@ primary_region = 'lhr'
 
 [build]
 
+# This app polls Telegram with getUpdates, which allows exactly one consumer
+# per bot token. A rolling deploy briefly runs the old and new machines at the
+# same time, giving two pollers: Telegram answers one with 409 Conflict and
+# users get duplicate reminders. "immediate" stops the old machine before the
+# new one starts, trading a few seconds of downtime for a single poller.
+#
+# The other half of this guarantee is machine count, which fly.toml cannot
+# express — it must be set once per app, out of band:
+#
+#     fly scale count 1
+#
+[deploy]
+  strategy = 'immediate'
+
 [[vm]]
   memory = '256mb'
   cpus = 1

@@ -1,9 +1,24 @@
 ONBOARDING_WELCOME = (
-    "Hi! I'm your private anxiety journal. 🌿\n\n"
+    "Hi! I'm your anxiety journal. 🌿\n\n"
     "I'm here to help you process your thoughts and feelings through daily check-ins. "
     "Over time, we'll spot patterns together.\n\n"
-    "Let's get started. What's your name?"
+    "First, a quick word about what happens to what you write."
 )
+
+PRIVACY_NOTICE = (
+    "*What happens to what you write*\n\n"
+    "• Your entries, mood scores and settings are stored in this bot's database.\n"
+    "• The text of each entry is sent to Anthropic's API, which writes the replies, "
+    "extracts the tags and generates your weekly summary. Under its API terms that "
+    "text is not used to train models.\n"
+    "• Messages travel through Telegram, so they are not end-to-end encrypted.\n"
+    "• There's no self-serve delete yet — it's being built. Until then, ask and "
+    "your data will be removed.\n"
+    "• I'm a journalling tool. I'm not a therapist, a diagnosis, or a crisis service.\n\n"
+    "Type */privacy* any time to read this again."
+)
+
+PRIVACY_ACCEPTED_PROMPT = "If that's alright with you, let's get started. What's your name?"
 
 ONBOARDING_TIMEZONE = (
     "Nice to meet you, {name}! 🙂\n\n"
@@ -76,7 +91,14 @@ HELP_MESSAGE = (
     "*/history* — Show your recent entries\n"
     "*/stats* — Show your stats\n"
     "*/summary* — Show your weekly mood summary\n"
-    "*/cancel* — End the current session"
+    "*/privacy* — What happens to what you write\n"
+    "*/cancel* — End the current session\n\n"
+    "———\n"
+    "I'm a journalling tool, not a crisis service or a substitute for "
+    "professional care. If you need urgent support:\n"
+    "• *International crisis centres*: iasp.info/resources/Crisis\\_Centres\n"
+    "• *Crisis Text Line* (US/UK/CA/IE): text HOME to 741741\n"
+    "• *Samaritans* (UK/IE): 116 123"
 )
 
 ERROR_GENERIC = "Something went wrong. Please try again."
@@ -104,6 +126,13 @@ GUIDANCE_CRISIS_RESOURCES = (
     "• *International crisis centres*: iasp.info/resources/Crisis\\_Centres\n"
     "• *Crisis Text Line* (US/UK/CA/IE): text HOME to 741741\n"
     "• *Samaritans* (UK/IE): 116 123"
+)
+
+MOOD_LOST = (
+    "Sorry — I've lost track of the rating that goes with this entry, "
+    "so I haven't saved it yet.\n\n"
+    "Could you rate your mood from 1 to 10 again? "
+    "I'll ask for your entry straight after."
 )
 
 WEEKLY_SUMMARY_EMPTY = (

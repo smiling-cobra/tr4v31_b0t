@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from services.llm_service import LlmService
 
 DEFAULT_MODEL = 'claude-3-5-sonnet-latest'
