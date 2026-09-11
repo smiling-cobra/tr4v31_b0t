@@ -28,6 +28,20 @@ For Fly.io deployments, set or update the model with:
 fly secrets set ANTHROPIC_MODEL=<your-enabled-model-id>
 ```
 
+## Deployment
+
+The bot polls Telegram with `getUpdates`, which permits exactly one consumer per
+token. Two running machines means two pollers, 409 Conflict responses, and
+duplicate reminders — so the app must stay at a single instance:
+
+```bash
+fly scale count 1
+```
+
+That is a one-time, per-app setting and cannot live in `fly.toml`. The matching
+half — `[deploy] strategy = 'immediate'`, which stops the old machine before
+starting the new one instead of overlapping them — is in `fly.toml`.
+
 ## Run
 
 ```bash
