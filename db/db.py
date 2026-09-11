@@ -32,11 +32,14 @@ def get_collection(name: str):
 def users_collection():
     return get_collection('users')
 
+
 def entries_collection():
     return get_collection('entries')
 
+
 def streaks_collection():
     return get_collection('streaks')
+
 
 def notifications_collection():
     return get_collection('notifications')

@@ -14,7 +14,7 @@ from telegram.ext import (
 from timezonefinder import TimezoneFinder
 
 from bot.keyboards import (
-    CHECK_IN, GUIDANCE_NO, GUIDANCE_YES, HELP, HISTORY, STATS, WEEKLY_SUMMARY,
+    CHECK_IN, GUIDANCE_YES, HELP, HISTORY, STATS, WEEKLY_SUMMARY,
     get_guidance_keyboard, get_main_menu_keyboard, get_mood_keyboard, get_timezone_keyboard,
 )
 from messages.strings import (
@@ -25,7 +25,6 @@ from messages.strings import (
     ERROR_GENERIC,
     GUIDANCE_CRISIS_RESOURCES,
     GUIDANCE_DECLINED,
-    GUIDANCE_ERROR_MESSAGE,
     GUIDANCE_OFFER_LOW,
     GUIDANCE_OFFER_VERY_LOW,
     HELP_MESSAGE,
@@ -62,7 +61,10 @@ _MD_SPECIAL = re.compile(r'([_*`\[])')
 
 
 def _escape_md(text: str) -> str:
+    """Escape Markdown v1 special characters in user-supplied or external text."""
     return _MD_SPECIAL.sub(r'\\\1', text)
+
+
 _tf = TimezoneFinder()
 _ALL_TIMEZONES = sorted(available_timezones())
 
@@ -72,16 +74,18 @@ def _search_timezones(query: str) -> list:
     needle = query.strip().replace(' ', '_').lower()
     return [tz for tz in _ALL_TIMEZONES if needle in tz.lower()]
 
-ONBOARDING_NAME, ONBOARDING_TIMEZONE, ONBOARDING_TIME, MAIN_MENU, CHECK_IN_MOOD, CHECK_IN_TEXT, CHECK_IN_GUIDANCE_OFFER = range(7)
+
+(
+    ONBOARDING_NAME,
+    ONBOARDING_TIMEZONE,
+    ONBOARDING_TIME,
+    MAIN_MENU,
+    CHECK_IN_MOOD,
+    CHECK_IN_TEXT,
+    CHECK_IN_GUIDANCE_OFFER,
+) = range(7)
 
 LOW_MOOD_THRESHOLD = 4
-
-
-def _escape_md(text: str) -> str:
-    """Escape Markdown v1 special characters in user-supplied or external text."""
-    for char in ('*', '_', '`', '['):
-        text = text.replace(char, f'\\{char}')
-    return text
 
 _user_svc = UserService()
 _journal_svc = JournalService()
