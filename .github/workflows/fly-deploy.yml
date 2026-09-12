@@ -1,15 +1,29 @@
 # See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
 
 name: Fly Deploy
+
 on:
   push:
     branches:
-      - main
+      - master
+
 jobs:
+  # Gate the deploy on the same lint and test run pull requests get. Without
+  # this, a direct push to master ships whatever it contains.
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
   deploy:
     name: Deploy app
+    needs: ci
     runs-on: ubuntu-latest
-    concurrency: deploy-group    # optional: ensure only one action runs at a time
+    # The bot polls Telegram with getUpdates, which allows one consumer per
+    # token. Overlapping deploys would briefly run two machines; queueing them
+    # keeps that to one at a time.
+    concurrency:
+      group: deploy-group
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
