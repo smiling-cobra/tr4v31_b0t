@@ -139,6 +139,15 @@ Cross-context changes should preserve the domain vocabulary in this file.
 - Reminder delivery must remain timezone-aware for each onboarded user.
 - Invalid reminder strings or malformed timezones must fail safely rather than trigger sends.
 - Business rules should stay concentrated in services, with repositories remaining thin persistence adapters.
+- A slow service call must not freeze the runtime. Handlers and the scheduler tick share a single event loop, so
+  every synchronous service call they make is dispatched to a worker thread rather than awaited inline, leaving the
+  loop free to keep polling, fire scheduled jobs, and finish in-flight API calls.
+- This is not per-user concurrency. `Application` processes one update at a time by default, so a slow handler still
+  delays the next user's update; the worker thread protects the runtime, not the queue. Unrestricted concurrency is
+  not the remedy — `ConversationHandler` state is keyed per chat, and interleaving two updates from the same chat
+  corrupts the state machine. Per-chat serialised concurrency is deferred, not solved.
+- Scheduled delivery depends on an optional framework component. Its absence must fail loudly at startup rather
+  than leave a running bot that silently never sends a reminder.
 
 ## Decisions and Documentation Drift
 

@@ -11,7 +11,7 @@ logging.basicConfig(
 
 load_dotenv()
 
-from telegram.ext import Updater
+from telegram.ext import Application
 from bot.handlers import commands, journal
 from db.db import get_db
 from services.scheduler_service import SchedulerService
@@ -20,23 +20,22 @@ telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
 
 
 def main() -> None:
-    get_db()  # initialise MongoDB before worker threads start
+    get_db()  # fail fast on a missing MONGODB_URI, not on the first check-in
 
-    updater = Updater(telegram_bot_token, use_context=True)
-    dispatcher = updater.dispatcher
+    application = Application.builder().token(telegram_bot_token).build()
 
     logging.info('Application start...')
 
-    commands.register(dispatcher)
-    journal.register(dispatcher)
+    commands.register(application)
+    journal.register(application)
 
-    SchedulerService().start(updater.job_queue)
+    SchedulerService().start(application.job_queue)
 
-    # Start polling the bot for updates
-    logging.info('Pooooolling...')
+    logging.info('Polling for updates...')
 
-    updater.start_polling()
-    updater.idle()
+    # Replaces start_polling() + idle(): run_polling owns the event loop and
+    # handles initialisation and graceful shutdown itself.
+    application.run_polling()
 
 
 if __name__ == '__main__':

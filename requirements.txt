@@ -1,11 +1,13 @@
-python-telegram-bot==13.0
-requests
-anthropic
-flake8
-black
-pymongo[srv]
-timezonefinder
-python-dotenv
-pytest>=7.0
-pytest-mock
-mongomock
+# Runtime dependencies only. Test and lint tools live in requirements-dev.txt
+# so they are not installed into the production image.
+
+# The [job-queue] extra is not optional for this bot. Without it
+# Application.job_queue is None and SchedulerService.start raises at boot,
+# which means no daily reminders and no weekly summaries.
+python-telegram-bot[job-queue]==22.8
+
+anthropic==1.5.0
+pymongo==4.18.1
+python-dotenv==1.2.3
+requests==2.34.2
+timezonefinder==9.0.0

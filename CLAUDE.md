@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-AnxietyJournal — a private Telegram chatbot that helps users externalise and process anxiety through daily check-ins. The bot asks how they're feeling, listens to their response, replies empathetically via LLM, and over time surfaces patterns in their mood and triggers. Written in Python using `python-telegram-bot` v13, calling Claude API for LLM responses, and MongoDB for persistence.
+AnxietyJournal — a private Telegram chatbot that helps users externalise and process anxiety through daily check-ins. The bot asks how they're feeling, listens to their response, replies empathetically via LLM, and over time surfaces patterns in their mood and triggers. Written in Python using `python-telegram-bot` v20+ (async), calling Claude API for LLM responses, and MongoDB for persistence.
 
 ## Commands
 
@@ -19,8 +19,8 @@ docker-compose up
 flake8
 black .
 
-# Run tests
-python -m venv .venv && .venv/bin/pip install -r requirements.txt
+# Run tests (Python 3.11+; runtime deps are in requirements.txt)
+python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pytest
 ```
 
@@ -30,7 +30,12 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt
 User (Telegram) → Handlers → Services → LLM / DB
 ```
 
-**Entry point**: `main.py` — creates the Telegram `Updater`, registers handlers, starts polling.
+**Entry point**: `main.py` — builds the Telegram `Application`, registers handlers, calls `run_polling()`.
+
+**Async rule**: handlers and scheduler callbacks are coroutines sharing one event loop. The services stay
+synchronous, so every call into them from a handler or the scheduler tick goes through `asyncio.to_thread`.
+A blocking Anthropic or pymongo call left on the loop stalls the bot for every user, not just the caller.
+This keeps the loop responsive; it does not make updates concurrent. Updates are still processed one at a time.
 
 **Conversation flow** (`bot/handlers/journal.py`):
 

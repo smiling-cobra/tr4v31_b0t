@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -22,26 +23,43 @@ def _escape_md(text: str) -> str:
 
 
 class SchedulerService:
+    """Periodic reminder and weekly-summary delivery.
+
+    The tick is a coroutine on the bot's event loop. The services it calls are
+    synchronous, so every one of them is dispatched to a worker thread — a
+    blocking Mongo scan or Anthropic call here would stall message handling for
+    every user, not just the one being notified.
+    """
+
     def __init__(self):
         self._user_svc = UserService()
         self._journal_svc = JournalService()
         self._llm_svc = LlmService()
 
     def start(self, job_queue) -> None:
+        # JobQueue is an optional extra in python-telegram-bot v20+. Installed
+        # without it, Application.job_queue is None and the bot would boot
+        # normally while silently never sending a reminder again.
+        if job_queue is None:
+            raise RuntimeError(
+                'Application.job_queue is None — python-telegram-bot is installed without '
+                'the [job-queue] extra, so reminders and weekly summaries cannot run.'
+            )
         job_queue.run_repeating(self._send_reminders, interval=_INTERVAL_SECONDS, first=0)
         logger.info('Reminder scheduler started.')
 
-    def _send_reminders(self, context) -> None:
-        users = self._user_svc.get_all_onboarded()
+    async def _send_reminders(self, context) -> None:
+        users = await asyncio.to_thread(self._user_svc.get_all_onboarded)
         for user in users:
             if self._is_due(user) and not self._sent_today(user):
                 try:
-                    context.bot.send_message(
+                    await context.bot.send_message(
                         chat_id=user['telegram_id'],
                         text=REMINDER_MESSAGE.format(name=_escape_md(user['name'])),
                         parse_mode='Markdown',
                     )
-                    self._user_svc.create_or_update(
+                    await asyncio.to_thread(
+                        self._user_svc.create_or_update,
                         user['telegram_id'],
                         last_reminder_sent=self._today(user['timezone']),
                     )
@@ -51,21 +69,22 @@ class SchedulerService:
 
             if self._is_weekly_summary_due(user):
                 try:
-                    self._send_weekly_summary(context, user)
+                    await self._send_weekly_summary(context, user)
                 except Exception:
                     logger.exception('Failed to send weekly summary to user %s.', user['telegram_id'])
 
-    def _send_weekly_summary(self, context, user: dict) -> None:
-        entries = self._journal_svc.get_weekly_entries(user['telegram_id'])
+    async def _send_weekly_summary(self, context, user: dict) -> None:
+        entries = await asyncio.to_thread(self._journal_svc.get_weekly_entries, user['telegram_id'])
         if len(entries) < _MIN_ENTRIES_FOR_WEEKLY_SUMMARY:
             return
-        summary = self._llm_svc.get_weekly_summary(entries)
-        context.bot.send_message(
+        summary = await asyncio.to_thread(self._llm_svc.get_weekly_summary, entries)
+        await context.bot.send_message(
             chat_id=user['telegram_id'],
             text=WEEKLY_SUMMARY_NOTIFICATION.format(summary=_escape_md(summary)),
             parse_mode='Markdown',
         )
-        self._user_svc.create_or_update(
+        await asyncio.to_thread(
+            self._user_svc.create_or_update,
             user['telegram_id'],
             last_weekly_summary_sent=self._today(user['timezone']),
         )

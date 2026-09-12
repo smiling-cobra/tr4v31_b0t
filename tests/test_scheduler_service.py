@@ -6,7 +6,7 @@ DB and bot interactions are mocked — no real connections made.
 from __future__ import annotations
 
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 from services.scheduler_service import SchedulerService
@@ -131,39 +131,39 @@ class TestSentToday:
 class TestSendReminders:
     def _context(self) -> MagicMock:
         ctx = MagicMock()
-        ctx.bot.send_message = MagicMock()
+        ctx.bot.send_message = AsyncMock()
         return ctx
 
-    def test_sends_message_to_due_user(self):
+    async def test_sends_message_to_due_user(self):
         svc = _svc()
         svc._user_svc.get_all_onboarded.return_value = [_user()]
         ctx = self._context()
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-28')
-            svc._send_reminders(ctx)
+            await svc._send_reminders(ctx)
         ctx.bot.send_message.assert_called_once()
         assert ctx.bot.send_message.call_args.kwargs['chat_id'] == 1
 
-    def test_message_contains_user_name(self):
+    async def test_message_contains_user_name(self):
         svc = _svc()
         svc._user_svc.get_all_onboarded.return_value = [_user(name='Bob')]
         ctx = self._context()
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-28')
-            svc._send_reminders(ctx)
+            await svc._send_reminders(ctx)
         sent_text = ctx.bot.send_message.call_args.kwargs['text']
         assert 'Bob' in sent_text
 
-    def test_does_not_send_when_not_due(self):
+    async def test_does_not_send_when_not_due(self):
         svc = _svc()
         svc._user_svc.get_all_onboarded.return_value = [_user(reminder_time='21:00')]
         ctx = self._context()
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-28')
-            svc._send_reminders(ctx)
+            await svc._send_reminders(ctx)
         ctx.bot.send_message.assert_not_called()
 
-    def test_does_not_send_when_already_sent_today(self):
+    async def test_does_not_send_when_already_sent_today(self):
         svc = _svc()
         svc._user_svc.get_all_onboarded.return_value = [
             _user(reminder_time='09:00', last_reminder_sent='2026-03-28')
@@ -171,21 +171,21 @@ class TestSendReminders:
         ctx = self._context()
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-28')
-            svc._send_reminders(ctx)
+            await svc._send_reminders(ctx)
         ctx.bot.send_message.assert_not_called()
 
-    def test_updates_last_reminder_sent_after_send(self):
+    async def test_updates_last_reminder_sent_after_send(self):
         svc = _svc()
         svc._user_svc.get_all_onboarded.return_value = [_user()]
         ctx = self._context()
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-28')
-            svc._send_reminders(ctx)
+            await svc._send_reminders(ctx)
         svc._user_svc.create_or_update.assert_called_once_with(
             1, last_reminder_sent='2026-03-28'
         )
 
-    def test_skips_failed_user_and_continues(self):
+    async def test_skips_failed_user_and_continues(self):
         svc = _svc()
         user_ok = _user(telegram_id=2, name='Bob')
         user_bad = _user(telegram_id=1, name='Alice')
@@ -194,21 +194,21 @@ class TestSendReminders:
         ctx.bot.send_message.side_effect = [Exception('network error'), None]
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-28')
-            svc._send_reminders(ctx)
+            await svc._send_reminders(ctx)
         # Bob's message still attempted despite Alice failing
         assert ctx.bot.send_message.call_count == 2
 
-    def test_message_escapes_markdown_special_chars_in_name(self):
+    async def test_message_escapes_markdown_special_chars_in_name(self):
         svc = _svc()
         svc._user_svc.get_all_onboarded.return_value = [_user(name='_Alice_')]
         ctx = self._context()
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-28')
-            svc._send_reminders(ctx)
+            await svc._send_reminders(ctx)
         sent_text = ctx.bot.send_message.call_args.kwargs['text']
         assert '\\_Alice\\_' in sent_text
 
-    def test_sends_to_multiple_due_users(self):
+    async def test_sends_to_multiple_due_users(self):
         svc = _svc()
         svc._user_svc.get_all_onboarded.return_value = [
             _user(telegram_id=1, name='Alice'),
@@ -217,7 +217,7 @@ class TestSendReminders:
         ctx = self._context()
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-28')
-            svc._send_reminders(ctx)
+            await svc._send_reminders(ctx)
         assert ctx.bot.send_message.call_count == 2
 
 
@@ -293,10 +293,10 @@ class TestIsWeeklySummaryDue:
 class TestSendWeeklySummary:
     def _context(self) -> MagicMock:
         ctx = MagicMock()
-        ctx.bot.send_message = MagicMock()
+        ctx.bot.send_message = AsyncMock()
         return ctx
 
-    def test_sends_when_enough_entries(self):
+    async def test_sends_when_enough_entries(self):
         svc = _svc()
         svc._journal_svc.get_weekly_entries.return_value = [
             {'mood_score': 7, 'text': 'good'},
@@ -305,20 +305,20 @@ class TestSendWeeklySummary:
         ]
         svc._llm_svc.get_weekly_summary.return_value = 'A thoughtful week.'
         ctx = self._context()
-        svc._send_weekly_summary(ctx, _user())
+        await svc._send_weekly_summary(ctx, _user())
         ctx.bot.send_message.assert_called_once()
 
-    def test_skips_when_too_few_entries(self):
+    async def test_skips_when_too_few_entries(self):
         svc = _svc()
         svc._journal_svc.get_weekly_entries.return_value = [
             {'mood_score': 5, 'text': 'entry'},
             {'mood_score': 4, 'text': 'another'},
         ]
         ctx = self._context()
-        svc._send_weekly_summary(ctx, _user())
+        await svc._send_weekly_summary(ctx, _user())
         ctx.bot.send_message.assert_not_called()
 
-    def test_updates_last_weekly_summary_sent(self):
+    async def test_updates_last_weekly_summary_sent(self):
         svc = _svc()
         svc._journal_svc.get_weekly_entries.return_value = [
             {'mood_score': i, 'text': 'e'} for i in range(3)
@@ -326,12 +326,12 @@ class TestSendWeeklySummary:
         svc._llm_svc.get_weekly_summary.return_value = 'Summary.'
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-29')
-            svc._send_weekly_summary(self._context(), _user())
+            await svc._send_weekly_summary(self._context(), _user())
         svc._user_svc.create_or_update.assert_called_once_with(
             1, last_weekly_summary_sent='2026-03-29'
         )
 
-    def test_weekly_summary_sent_during_reminder_loop(self):
+    async def test_weekly_summary_sent_during_reminder_loop(self):
         svc = _svc()
         svc._user_svc.get_all_onboarded.return_value = [_user()]
         svc._journal_svc.get_weekly_entries.return_value = [
@@ -341,6 +341,28 @@ class TestSendWeeklySummary:
         ctx = self._context()
         with patch('services.scheduler_service.datetime') as mock_dt:
             mock_dt.now.side_effect = _fixed_now(9, 0, '2026-03-29')
-            svc._send_reminders(ctx)
+            await svc._send_reminders(ctx)
         # daily reminder + weekly summary = 2 messages
         assert ctx.bot.send_message.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# JobQueue availability
+#
+# python-telegram-bot v20+ ships JobQueue as an optional extra. Installed
+# without it, Application.job_queue is None, and a scheduler that quietly
+# accepted that would boot a bot that never sends another reminder.
+# ---------------------------------------------------------------------------
+
+class TestJobQueueRequired:
+    def test_missing_job_queue_raises_at_startup(self):
+        import pytest
+
+        svc = _svc()
+        with pytest.raises(RuntimeError, match='job-queue'):
+            svc.start(None)
+
+    def test_tick_is_a_coroutine(self):
+        import inspect
+
+        assert inspect.iscoroutinefunction(SchedulerService._send_reminders)
