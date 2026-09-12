@@ -48,3 +48,13 @@ def streaks_collection():
 
 def notifications_collection():
     return get_collection('notifications')
+
+
+# python-telegram-bot persistence. Framework state, not domain data — kept in
+# their own collections so a /delete fan-out can see them for what they are.
+def conversations_collection():
+    return get_collection('ptb_conversations')
+
+
+def user_data_collection():
+    return get_collection('ptb_user_data')

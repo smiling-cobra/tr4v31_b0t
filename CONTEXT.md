@@ -106,7 +106,7 @@ Out of scope:
 - Journaling context: Entry creation, recent-history retrieval, weekly windows, stats aggregation, and streak semantics.
 - Support intelligence context: Empathetic replies, tag extraction, weekly synthesis, and low-mood coping guidance.
 - Scheduling context: Due-time calculation, reminder dispatch, and weekly-summary delivery rules.
-- Persistence context: MongoDB collection access for users, entries, streaks, and delivery metadata.
+- Persistence context: MongoDB collection access for users, entries, streaks, and delivery metadata, plus the stored conversation state the bot framework restores after a restart.
 
 Cross-context changes should preserve the domain vocabulary in this file.
 
@@ -120,6 +120,8 @@ Cross-context changes should preserve the domain vocabulary in this file.
 - Weekly summary data is built from entries within the last 7 local days, today included, starting at local midnight rather than 168 hours back.
 - Dates shown to a user are rendered in that user's timezone, so a label never disagrees with the day they lived through.
 - Average mood is derived from saved entries and rounded for display.
+- Conversation position and a narrow slice of session data — the user's name and the mood score of a check-in in progress — survive a restart or a deploy.
+- Raw journal text is never written outside the entries collection. It is deliberately excluded from persisted session data, which is allowlisted rather than filtered, so a newly added field is stored only when someone decides it should be.
 
 ## Domain Invariants
 
@@ -152,6 +154,12 @@ Cross-context changes should preserve the domain vocabulary in this file.
   corrupts the state machine. Per-chat serialised concurrency is deferred, not solved.
 - Scheduled delivery depends on an optional framework component. Its absence must fail loudly at startup rather
   than leave a running bot that silently never sends a reminder.
+- A failure must never end in silence. An exception escaping a handler still owes the user a reply and a usable
+  keyboard, and a message that belongs to no active conversation re-anchors them to the main menu rather than
+  being ignored.
+- Losing session state is a recoverable condition, not an error. Recovery cannot tell a wiped session from a
+  deliberate cancellation or a first-ever message, so it apologises for nothing and simply restores a usable
+  starting point.
 
 ## Decisions and Documentation Drift
 

@@ -25,7 +25,7 @@ from telegram.ext import (
 from timezonefinder import TimezoneFinder
 
 from bot.keyboards import (
-    CHECK_IN, GUIDANCE_YES, HELP, HISTORY, STATS, WEEKLY_SUMMARY,
+    CHECK_IN, GUIDANCE_YES, HELP, HISTORY, MAIN_MENU_CHOICES, STATS, WEEKLY_SUMMARY,
     get_guidance_keyboard, get_main_menu_keyboard, get_mood_keyboard, get_timezone_keyboard,
 )
 from messages.strings import (
@@ -439,6 +439,35 @@ async def handle_guidance_offer(update: Update, context: ContextTypes.DEFAULT_TY
     return MAIN_MENU
 
 
+async def recover_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entry point for a text message that belongs to no active conversation.
+
+    Reached when persisted state is genuinely gone, but also after a normal
+    `/cancel` or a first-ever message — the three are indistinguishable from
+    here, so this apologises for nothing and simply re-anchors the user.
+    """
+    telegram_id = update.effective_user.id
+    user = await asyncio.to_thread(_user_svc.get, telegram_id)
+
+    if not (user and user.get('onboarded')):
+        return await start(update, context)
+
+    # start() would re-fetch the user to learn this; we already have it.
+    context.user_data.setdefault('name', user['name'])
+
+    # A reply keyboard outlives the conversation that sent it, so the message
+    # that landed here is most often a menu tap. Act on it rather than making
+    # them tap the same button twice.
+    if update.message.text in MAIN_MENU_CHOICES:
+        return await handle_main_menu(update, context)
+
+    await update.message.reply_text(
+        MAIN_MENU_MESSAGE.format(name=user['name']),
+        reply_markup=get_main_menu_keyboard(),
+    )
+    return MAIN_MENU
+
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         CANCEL_MESSAGE.format(name=_name(context)),
@@ -454,6 +483,9 @@ def register(application: Application) -> None:
             CommandHandler('history', show_history),
             CommandHandler('stats', show_stats),
             CommandHandler('summary', show_weekly_summary),
+            # Last: only reached when nothing above matched and no conversation
+            # is active, which is exactly the lost-state case.
+            MessageHandler(filters.TEXT & ~filters.COMMAND, recover_state),
         ],
         states={
             ONBOARDING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)],
@@ -474,5 +506,9 @@ def register(application: Application) -> None:
         },
         fallbacks=[CommandHandler('cancel', cancel)],
         allow_reentry=True,
+        # Survives a restart or a deploy. `name` is what the persistence layer
+        # keys the stored states by, so changing it orphans live conversations.
+        name='journal',
+        persistent=True,
     )
     application.add_handler(handler)

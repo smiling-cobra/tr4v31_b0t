@@ -18,7 +18,8 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 load_dotenv()
 
 from telegram.ext import Application
-from bot.handlers import commands, journal
+from bot.handlers import commands, errors, journal
+from bot.persistence import MongoPersistence
 from db.db import get_db
 from services.scheduler_service import SchedulerService
 
@@ -28,12 +29,18 @@ telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
 def main() -> None:
     get_db()  # fail fast on a missing MONGODB_URI, not on the first check-in
 
-    application = Application.builder().token(telegram_bot_token).build()
+    application = (
+        Application.builder()
+        .token(telegram_bot_token)
+        .persistence(MongoPersistence())
+        .build()
+    )
 
     logging.info('Application start...')
 
     commands.register(application)
     journal.register(application)
+    errors.register(application)
 
     SchedulerService().start(application.job_queue)
 
