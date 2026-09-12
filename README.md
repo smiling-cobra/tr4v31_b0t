@@ -58,9 +58,12 @@ docker-compose up
 ## Test
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pytest
 ```
+
+`requirements.txt` holds runtime dependencies only — the production image does not
+install linters or a test runner. `requirements-dev.txt` includes it and adds those.
 
 ## Docker
 
