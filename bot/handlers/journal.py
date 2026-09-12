@@ -1,3 +1,13 @@
+"""Telegram conversation handlers.
+
+Everything here runs on the single asyncio event loop that python-telegram-bot
+v20+ uses, so any blocking call — Anthropic over HTTP, pymongo over the wire —
+would stall every other user for its duration. The services stay synchronous
+(the scheduler calls them too), so each blocking call is handed to a worker
+thread with `asyncio.to_thread` at the call site. That boundary is deliberate
+and visible: if you add a service call here, wrap it.
+"""
+import asyncio
 import logging
 import re
 from collections import Counter
@@ -5,11 +15,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
-    CallbackContext,
+    Application,
     CommandHandler,
+    ContextTypes,
     ConversationHandler,
-    Filters,
     MessageHandler,
+    filters,
 )
 from timezonefinder import TimezoneFinder
 
@@ -96,60 +107,60 @@ _journal_svc = JournalService()
 _llm_svc = LlmService()
 
 
-def _name(context: CallbackContext) -> str:
+def _name(context: ContextTypes.DEFAULT_TYPE) -> str:
     return context.user_data.get('name', 'there')
 
 
-def start(update: Update, context: CallbackContext) -> int:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     telegram_id = update.effective_user.id
-    user = _user_svc.get(telegram_id)
+    user = await asyncio.to_thread(_user_svc.get, telegram_id)
     if user and user.get('onboarded'):
         context.user_data['name'] = user['name']
-        update.message.reply_text(
+        await update.message.reply_text(
             MAIN_MENU_MESSAGE.format(name=user['name']),
             reply_markup=get_main_menu_keyboard()
         )
         return MAIN_MENU
-    update.message.reply_text(ONBOARDING_WELCOME)
-    update.message.reply_text(PRIVACY_NOTICE, parse_mode='Markdown')
-    update.message.reply_text(PRIVACY_ACCEPTED_PROMPT)
+    await update.message.reply_text(ONBOARDING_WELCOME)
+    await update.message.reply_text(PRIVACY_NOTICE, parse_mode='Markdown')
+    await update.message.reply_text(PRIVACY_ACCEPTED_PROMPT)
     return ONBOARDING_NAME
 
 
-def handle_name(update: Update, context: CallbackContext) -> int:
+async def handle_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     name = update.message.text.strip()
     context.user_data['name'] = name
-    update.message.reply_text(
+    await update.message.reply_text(
         ONBOARDING_TIMEZONE_MSG.format(name=name),
         reply_markup=get_timezone_keyboard(),
     )
     return ONBOARDING_TIMEZONE
 
 
-def handle_timezone_location(update: Update, context: CallbackContext) -> int:
+async def handle_timezone_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     loc = update.message.location
     tz_str = _tf.timezone_at(lat=loc.latitude, lng=loc.longitude)
     if not tz_str:
-        update.message.reply_text(TIMEZONE_DETECTION_FAILED, reply_markup=get_timezone_keyboard())
+        await update.message.reply_text(TIMEZONE_DETECTION_FAILED, reply_markup=get_timezone_keyboard())
         return ONBOARDING_TIMEZONE
     context.user_data['timezone'] = tz_str
-    update.message.reply_text(
+    await update.message.reply_text(
         TIMEZONE_DETECTED.format(timezone=_escape_md(tz_str)),
         parse_mode='Markdown',
         reply_markup=get_timezone_keyboard(),
     )
-    update.message.reply_text(ONBOARDING_TIME_MSG, reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text(ONBOARDING_TIME_MSG, reply_markup=ReplyKeyboardRemove())
     return ONBOARDING_TIME
 
 
-def handle_timezone(update: Update, context: CallbackContext) -> int:
+async def handle_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     tz_str = update.message.text.strip()
 
     # Exact IANA match
     try:
         ZoneInfo(tz_str)
         context.user_data['timezone'] = tz_str
-        update.message.reply_text(ONBOARDING_TIME_MSG, reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(ONBOARDING_TIME_MSG, reply_markup=ReplyKeyboardRemove())
         return ONBOARDING_TIME
     except (ZoneInfoNotFoundError, KeyError):
         pass
@@ -158,41 +169,42 @@ def handle_timezone(update: Update, context: CallbackContext) -> int:
     matches = _search_timezones(tz_str)
     if len(matches) == 1:
         context.user_data['timezone'] = matches[0]
-        update.message.reply_text(
+        await update.message.reply_text(
             TIMEZONE_DETECTED.format(timezone=_escape_md(matches[0])),
             parse_mode='Markdown',
         )
-        update.message.reply_text(ONBOARDING_TIME_MSG, reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(ONBOARDING_TIME_MSG, reply_markup=ReplyKeyboardRemove())
         return ONBOARDING_TIME
     if 1 < len(matches) <= 5:
         kb = ReplyKeyboardMarkup([[m] for m in matches], resize_keyboard=True, one_time_keyboard=True)
-        update.message.reply_text(TIMEZONE_SUGGESTIONS.format(query=tz_str), reply_markup=kb)
+        await update.message.reply_text(TIMEZONE_SUGGESTIONS.format(query=tz_str), reply_markup=kb)
         return ONBOARDING_TIMEZONE
 
-    update.message.reply_text(WRONG_TIMEZONE)
+    await update.message.reply_text(WRONG_TIMEZONE)
     return ONBOARDING_TIMEZONE
 
 
-def handle_reminder_time(update: Update, context: CallbackContext) -> int:
+async def handle_reminder_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     time_str = update.message.text.strip()
     if not re.match(r'^\d{2}:\d{2}$', time_str):
-        update.message.reply_text(WRONG_TIME)
+        await update.message.reply_text(WRONG_TIME)
         return ONBOARDING_TIME
     h, m = int(time_str[:2]), int(time_str[3:])
     if not (0 <= h <= 23 and 0 <= m <= 59):
-        update.message.reply_text(WRONG_TIME)
+        await update.message.reply_text(WRONG_TIME)
         return ONBOARDING_TIME
 
     name = context.user_data['name']
     timezone = context.user_data['timezone']
-    _user_svc.create_or_update(
+    await asyncio.to_thread(
+        _user_svc.create_or_update,
         update.effective_user.id,
         name=name,
         timezone=timezone,
         reminder_time=time_str,
         onboarded=True,
     )
-    update.message.reply_text(
+    await update.message.reply_text(
         ONBOARDING_DONE.format(name=_escape_md(name), reminder_time=time_str, timezone=timezone),
         reply_markup=get_main_menu_keyboard(),
         parse_mode='Markdown',
@@ -200,49 +212,49 @@ def handle_reminder_time(update: Update, context: CallbackContext) -> int:
     return MAIN_MENU
 
 
-def handle_main_menu(update: Update, context: CallbackContext) -> int:
+async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text
     name = _name(context)
 
     if choice == CHECK_IN:
-        update.message.reply_text(
+        await update.message.reply_text(
             CHECK_IN_MOOD_PROMPT.format(name=name),
             reply_markup=get_mood_keyboard()
         )
         return CHECK_IN_MOOD
 
     if choice == HISTORY:
-        return show_history(update, context)
+        return await show_history(update, context)
 
     if choice == STATS:
-        return show_stats(update, context)
+        return await show_stats(update, context)
 
     if choice == WEEKLY_SUMMARY:
-        return show_weekly_summary(update, context)
+        return await show_weekly_summary(update, context)
 
     if choice == HELP:
-        update.message.reply_text(HELP_MESSAGE, parse_mode='Markdown')
+        await update.message.reply_text(HELP_MESSAGE, parse_mode='Markdown')
         return MAIN_MENU
 
     return MAIN_MENU
 
 
-def handle_mood(update: Update, context: CallbackContext) -> int:
+async def handle_mood(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.strip()
     if not text.isdigit() or not (1 <= int(text) <= 10):
-        update.message.reply_text(WRONG_MOOD, reply_markup=get_mood_keyboard())
+        await update.message.reply_text(WRONG_MOOD, reply_markup=get_mood_keyboard())
         return CHECK_IN_MOOD
     context.user_data['mood_score'] = int(text)
-    update.message.reply_text(CHECK_IN_TEXT_PROMPT.format(score=text))
+    await update.message.reply_text(CHECK_IN_TEXT_PROMPT.format(score=text))
     return CHECK_IN_TEXT
 
 
-def _send_crisis_resources(update: Update) -> None:
+async def _send_crisis_resources(update: Update) -> None:
     """Deliver crisis resources. Never gated on an opt-in, a DB call or an LLM call."""
-    update.message.reply_text(GUIDANCE_CRISIS_RESOURCES, parse_mode='Markdown')
+    await update.message.reply_text(GUIDANCE_CRISIS_RESOURCES, parse_mode='Markdown')
 
 
-def handle_entry_text(update: Update, context: CallbackContext) -> int:
+async def handle_entry_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text.strip()
     telegram_id = update.effective_user.id
     mood_score = context.user_data.get('mood_score')
@@ -253,26 +265,26 @@ def handle_entry_text(update: Update, context: CallbackContext) -> int:
     # path. Re-ask instead.
     if mood_score is None:
         logger.warning('handle_entry_text: mood_score missing for user %s', telegram_id)
-        update.message.reply_text(MOOD_LOST, reply_markup=get_mood_keyboard())
+        await update.message.reply_text(MOOD_LOST, reply_markup=get_mood_keyboard())
         return CHECK_IN_MOOD
 
     # Before the try block on purpose. Everything below can fail — a Mongo
     # blip, an Anthropic timeout — and the except returns to the main menu,
     # so anything downstream of it is not a guarantee.
     if mood_score <= CRISIS_MOOD_THRESHOLD:
-        _send_crisis_resources(update)
+        await _send_crisis_resources(update)
 
     try:
-        tags = _llm_svc.extract_tags(text)
-        _journal_svc.save_entry(telegram_id, mood_score, text, tags)
-        stats = _journal_svc.get_stats(telegram_id)
-        llm_response = _llm_svc.get_empathetic_response(mood_score, text)
+        tags = await asyncio.to_thread(_llm_svc.extract_tags, text)
+        await asyncio.to_thread(_journal_svc.save_entry, telegram_id, mood_score, text, tags)
+        stats = await asyncio.to_thread(_journal_svc.get_stats, telegram_id)
+        llm_response = await asyncio.to_thread(_llm_svc.get_empathetic_response, mood_score, text)
     except Exception:
         logger.exception('Check-in failed for user %s', telegram_id)
-        update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
+        await update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
         return MAIN_MENU
 
-    update.message.reply_text(
+    await update.message.reply_text(
         CHECK_IN_DONE.format(name=_escape_md(name), llm_response=_escape_md(llm_response), streak=stats['streak']),
         reply_markup=get_main_menu_keyboard(),
         parse_mode='Markdown',
@@ -281,23 +293,23 @@ def handle_entry_text(update: Update, context: CallbackContext) -> int:
     if mood_score <= LOW_MOOD_THRESHOLD:
         context.user_data['entry_text'] = text
         offer = GUIDANCE_OFFER_VERY_LOW if mood_score <= 2 else GUIDANCE_OFFER_LOW
-        update.message.reply_text(offer, reply_markup=get_guidance_keyboard())
+        await update.message.reply_text(offer, reply_markup=get_guidance_keyboard())
         return CHECK_IN_GUIDANCE_OFFER
 
     return MAIN_MENU
 
 
-def show_history(update: Update, context: CallbackContext) -> int:
+async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     telegram_id = update.effective_user.id
     try:
-        entries = _journal_svc.get_recent_entries(telegram_id)
+        entries = await asyncio.to_thread(_journal_svc.get_recent_entries, telegram_id)
     except Exception:
         logger.exception('Failed to load history for user %s', telegram_id)
-        update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
+        await update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
         return MAIN_MENU
 
     if not entries:
-        update.message.reply_text(
+        await update.message.reply_text(
             HISTORY_EMPTY, parse_mode='Markdown', reply_markup=get_main_menu_keyboard()
         )
         return MAIN_MENU
@@ -307,28 +319,28 @@ def show_history(update: Update, context: CallbackContext) -> int:
         date_str = e['created_at'].strftime('%d %b %Y')
         body += HISTORY_ENTRY.format(date=date_str, score=e['mood_score'], text=_escape_md(e['text'][:200]))
 
-    update.message.reply_text(body, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
+    await update.message.reply_text(body, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
     return MAIN_MENU
 
 
-def show_stats(update: Update, context: CallbackContext) -> int:
+async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     telegram_id = update.effective_user.id
     try:
-        stats = _journal_svc.get_stats(telegram_id)
-        entries = _journal_svc.get_recent_entries(telegram_id, 7)
+        stats = await asyncio.to_thread(_journal_svc.get_stats, telegram_id)
+        entries = await asyncio.to_thread(_journal_svc.get_recent_entries, telegram_id, 7)
     except Exception:
         logger.exception('Failed to load stats for user %s', telegram_id)
-        update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
+        await update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
         return MAIN_MENU
 
     if stats['total'] == 0:
-        update.message.reply_text(STATS_EMPTY, reply_markup=get_main_menu_keyboard())
+        await update.message.reply_text(STATS_EMPTY, reply_markup=get_main_menu_keyboard())
         return MAIN_MENU
 
     all_tags = [tag for e in entries for tag in e.get('tags', [])]
     top_tags = ', '.join(f'#{_escape_md(t)}' for t, _ in Counter(all_tags).most_common(3)) or 'none yet'
 
-    update.message.reply_text(
+    await update.message.reply_text(
         STATS_MESSAGE.format(
             streak=stats['streak'],
             total=stats['total'],
@@ -349,17 +361,17 @@ def _mood_bar(score: int) -> str:
     return '▓' * n + '░' * (10 - n)
 
 
-def show_weekly_summary(update: Update, context: CallbackContext) -> int:
+async def show_weekly_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     telegram_id = update.effective_user.id
     try:
-        entries = _journal_svc.get_weekly_entries(telegram_id)
+        entries = await asyncio.to_thread(_journal_svc.get_weekly_entries, telegram_id)
     except Exception:
         logger.exception('Failed to load weekly entries for user %s', telegram_id)
-        update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
+        await update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
         return MAIN_MENU
 
     if not entries:
-        update.message.reply_text(
+        await update.message.reply_text(
             WEEKLY_SUMMARY_EMPTY, parse_mode='Markdown', reply_markup=get_main_menu_keyboard()
         )
         return MAIN_MENU
@@ -381,47 +393,47 @@ def show_weekly_summary(update: Update, context: CallbackContext) -> int:
 
     if len(entries) >= _MIN_ENTRIES_FOR_LLM_SUMMARY:
         body += WEEKLY_SUMMARY_LLM_INTRO
-        body += _escape_md(_llm_svc.get_weekly_summary(entries))
+        body += _escape_md(await asyncio.to_thread(_llm_svc.get_weekly_summary, entries))
     else:
         body += WEEKLY_SUMMARY_TOO_FEW
 
-    update.message.reply_text(body, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
+    await update.message.reply_text(body, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
     return MAIN_MENU
 
 
-def handle_guidance_offer(update: Update, context: CallbackContext) -> int:
+async def handle_guidance_offer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     mood_score = context.user_data.get('mood_score')
 
     # This state is only reachable from a low-mood check-in, so a missing score
     # means lost state, not a well user. Fail closed and show resources.
     if mood_score is None:
         logger.warning('handle_guidance_offer: mood_score missing for user %s', update.effective_user.id)
-        _send_crisis_resources(update)
+        await _send_crisis_resources(update)
         mood_score = CRISIS_MOOD_THRESHOLD
 
     if update.message.text != GUIDANCE_YES:
-        update.message.reply_text(GUIDANCE_DECLINED, reply_markup=get_main_menu_keyboard())
+        await update.message.reply_text(GUIDANCE_DECLINED, reply_markup=get_main_menu_keyboard())
         return MAIN_MENU
 
     entry_text = context.user_data.get('entry_text', '')
     if not entry_text:
         logger.warning('handle_guidance_offer: entry_text missing for user %s', update.effective_user.id)
 
-    guidance = _llm_svc.get_psychological_guidance(mood_score, entry_text)
+    guidance = await asyncio.to_thread(_llm_svc.get_psychological_guidance, mood_score, entry_text)
 
-    update.message.reply_text(guidance, reply_markup=get_main_menu_keyboard())
+    await update.message.reply_text(guidance, reply_markup=get_main_menu_keyboard())
     return MAIN_MENU
 
 
-def cancel(update: Update, context: CallbackContext) -> int:
-    update.message.reply_text(
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
         CANCEL_MESSAGE.format(name=_name(context)),
         reply_markup=ReplyKeyboardRemove(),
     )
     return ConversationHandler.END
 
 
-def register(dispatcher) -> None:
+def register(application: Application) -> None:
     handler = ConversationHandler(
         entry_points=[
             CommandHandler('start', start),
@@ -430,23 +442,23 @@ def register(dispatcher) -> None:
             CommandHandler('summary', show_weekly_summary),
         ],
         states={
-            ONBOARDING_NAME: [MessageHandler(Filters.text & ~Filters.command, handle_name)],
+            ONBOARDING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)],
             ONBOARDING_TIMEZONE: [
-                MessageHandler(Filters.location, handle_timezone_location),
-                MessageHandler(Filters.text & ~Filters.command, handle_timezone),
+                MessageHandler(filters.LOCATION, handle_timezone_location),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_timezone),
             ],
-            ONBOARDING_TIME: [MessageHandler(Filters.text & ~Filters.command, handle_reminder_time)],
+            ONBOARDING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reminder_time)],
             MAIN_MENU: [
-                MessageHandler(Filters.text & ~Filters.command, handle_main_menu),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu),
                 CommandHandler('history', show_history),
                 CommandHandler('stats', show_stats),
                 CommandHandler('summary', show_weekly_summary),
             ],
-            CHECK_IN_MOOD: [MessageHandler(Filters.text & ~Filters.command, handle_mood)],
-            CHECK_IN_TEXT: [MessageHandler(Filters.text & ~Filters.command, handle_entry_text)],
-            CHECK_IN_GUIDANCE_OFFER: [MessageHandler(Filters.text & ~Filters.command, handle_guidance_offer)],
+            CHECK_IN_MOOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_mood)],
+            CHECK_IN_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_entry_text)],
+            CHECK_IN_GUIDANCE_OFFER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_guidance_offer)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
         allow_reentry=True,
     )
-    dispatcher.add_handler(handler)
+    application.add_handler(handler)

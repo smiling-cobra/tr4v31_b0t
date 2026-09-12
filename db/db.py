@@ -8,6 +8,11 @@ load_dotenv()
 _client: MongoClient = None
 _db: Database = None
 
+# Every Mongo call now runs in a worker thread handed off from the event loop.
+# pymongo's 30s default would pin one of those threads for half a minute and
+# leave the user staring at nothing before the error arrives.
+_SERVER_SELECTION_TIMEOUT_MS = 5000
+
 
 def get_db() -> Database:
     global _client, _db
@@ -18,7 +23,7 @@ def get_db() -> Database:
         if not mongo_uri:
             raise ValueError('MONGODB_URI is not set in environment variables')
 
-        _client = MongoClient(mongo_uri)
+        _client = MongoClient(mongo_uri, serverSelectionTimeoutMS=_SERVER_SELECTION_TIMEOUT_MS)
         _db = _client['anxiety_journal']
 
     return _db

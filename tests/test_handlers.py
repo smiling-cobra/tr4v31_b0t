@@ -6,7 +6,7 @@ LLM and DB calls are patched wherever a handler reaches them.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from datetime import datetime
 
@@ -40,6 +40,7 @@ from messages.strings import GUIDANCE_CRISIS_RESOURCES
 def _update(text: str, user_id: int = 12345) -> MagicMock:
     u = MagicMock()
     u.message.text = text
+    u.message.reply_text = AsyncMock()
     u.effective_user.id = user_id
     return u
 
@@ -48,6 +49,7 @@ def _location_update(lat: float, lng: float, user_id: int = 12345) -> MagicMock:
     u = MagicMock()
     u.message.location.latitude = lat
     u.message.location.longitude = lng
+    u.message.reply_text = AsyncMock()
     u.effective_user.id = user_id
     return u
 
@@ -65,59 +67,59 @@ def _context(user_data: dict | None = None) -> MagicMock:
 class TestHandleTimezone:
     # --- exact IANA match ---
 
-    def test_valid_iana_timezone_advances_state(self):
+    async def test_valid_iana_timezone_advances_state(self):
         ctx = _context({'name': 'Alice'})
-        result = handle_timezone(_update('Europe/London'), ctx)
+        result = await handle_timezone(_update('Europe/London'), ctx)
         assert result == ONBOARDING_TIME
 
-    def test_valid_timezone_stored_in_user_data(self):
+    async def test_valid_timezone_stored_in_user_data(self):
         ctx = _context({'name': 'Alice'})
-        handle_timezone(_update('America/New_York'), ctx)
+        await handle_timezone(_update('America/New_York'), ctx)
         assert ctx.user_data['timezone'] == 'America/New_York'
 
-    def test_utc_is_accepted(self):
+    async def test_utc_is_accepted(self):
         ctx = _context({'name': 'Alice'})
-        result = handle_timezone(_update('UTC'), ctx)
+        result = await handle_timezone(_update('UTC'), ctx)
         assert result == ONBOARDING_TIME
 
     # --- fuzzy single-match: auto-accept ---
 
-    def test_city_name_single_match_advances_state(self):
+    async def test_city_name_single_match_advances_state(self):
         # "London" uniquely matches Europe/London
         ctx = _context({'name': 'Alice'})
-        result = handle_timezone(_update('London'), ctx)
+        result = await handle_timezone(_update('London'), ctx)
         assert result == ONBOARDING_TIME
 
-    def test_city_name_single_match_stores_timezone(self):
+    async def test_city_name_single_match_stores_timezone(self):
         ctx = _context({'name': 'Alice'})
-        handle_timezone(_update('London'), ctx)
+        await handle_timezone(_update('London'), ctx)
         assert ctx.user_data['timezone'] == 'Europe/London'
 
-    def test_city_name_case_insensitive(self):
+    async def test_city_name_case_insensitive(self):
         ctx = _context({'name': 'Alice'})
-        result = handle_timezone(_update('london'), ctx)
+        result = await handle_timezone(_update('london'), ctx)
         assert result == ONBOARDING_TIME
 
-    def test_city_name_space_normalized(self):
+    async def test_city_name_space_normalized(self):
         # "New York" → needle "new_york" → America/New_York
         ctx = _context({'name': 'Alice'})
-        result = handle_timezone(_update('New York'), ctx)
+        result = await handle_timezone(_update('New York'), ctx)
         assert result == ONBOARDING_TIME
         assert ctx.user_data['timezone'] == 'America/New_York'
 
-    def test_valid_iana_timezone_removes_keyboard(self):
+    async def test_valid_iana_timezone_removes_keyboard(self):
         from telegram import ReplyKeyboardRemove
         update = _update('Europe/London')
-        handle_timezone(update, _context({'name': 'Alice'}))
+        await handle_timezone(update, _context({'name': 'Alice'}))
         assert any(
             isinstance(call.kwargs.get('reply_markup'), ReplyKeyboardRemove)
             for call in update.message.reply_text.call_args_list
         )
 
-    def test_city_name_single_match_removes_keyboard(self):
+    async def test_city_name_single_match_removes_keyboard(self):
         from telegram import ReplyKeyboardRemove
         update = _update('London')
-        handle_timezone(update, _context({'name': 'Alice'}))
+        await handle_timezone(update, _context({'name': 'Alice'}))
         assert any(
             isinstance(call.kwargs.get('reply_markup'), ReplyKeyboardRemove)
             for call in update.message.reply_text.call_args_list
@@ -125,20 +127,20 @@ class TestHandleTimezone:
 
     # --- fuzzy multi-match (2-5): show keyboard, stay ---
 
-    def test_city_name_multiple_matches_stays_on_timezone(self):
+    async def test_city_name_multiple_matches_stays_on_timezone(self):
         # "Kentucky" matches America/Kentucky/Louisville and America/Kentucky/Monticello
-        result = handle_timezone(_update('Kentucky'), _context({'name': 'Alice'}))
+        result = await handle_timezone(_update('Kentucky'), _context({'name': 'Alice'}))
         assert result == ONBOARDING_TIMEZONE
 
     # --- no match or too many matches: error, stay ---
 
-    def test_unknown_input_stays_on_timezone(self):
-        result = handle_timezone(_update('Mars/Olympus'), _context({'name': 'Alice'}))
+    async def test_unknown_input_stays_on_timezone(self):
+        result = await handle_timezone(_update('Mars/Olympus'), _context({'name': 'Alice'}))
         assert result == ONBOARDING_TIMEZONE
 
-    def test_too_many_matches_stays_on_timezone(self):
+    async def test_too_many_matches_stays_on_timezone(self):
         # "north" appears in many zone names (>5)
-        result = handle_timezone(_update('north'), _context({'name': 'Alice'}))
+        result = await handle_timezone(_update('north'), _context({'name': 'Alice'}))
         assert result == ONBOARDING_TIMEZONE
 
 
@@ -147,44 +149,44 @@ class TestHandleTimezone:
 # ---------------------------------------------------------------------------
 
 class TestHandleTimezoneLocation:
-    def test_valid_location_advances_state(self):
+    async def test_valid_location_advances_state(self):
         ctx = _context({'name': 'Alice'})
         with patch('bot.handlers.journal._tf') as mock_tf:
             mock_tf.timezone_at.return_value = 'Europe/Berlin'
-            result = handle_timezone_location(_location_update(52.52, 13.405), ctx)
+            result = await handle_timezone_location(_location_update(52.52, 13.405), ctx)
         assert result == ONBOARDING_TIME
 
-    def test_valid_location_stores_timezone(self):
+    async def test_valid_location_stores_timezone(self):
         ctx = _context({'name': 'Alice'})
         with patch('bot.handlers.journal._tf') as mock_tf:
             mock_tf.timezone_at.return_value = 'Europe/Berlin'
-            handle_timezone_location(_location_update(52.52, 13.405), ctx)
+            await handle_timezone_location(_location_update(52.52, 13.405), ctx)
         assert ctx.user_data['timezone'] == 'Europe/Berlin'
 
-    def test_valid_location_removes_keyboard(self):
+    async def test_valid_location_removes_keyboard(self):
         from telegram import ReplyKeyboardRemove
         update = _location_update(52.52, 13.405)
         with patch('bot.handlers.journal._tf') as mock_tf:
             mock_tf.timezone_at.return_value = 'Europe/Berlin'
-            handle_timezone_location(update, _context({'name': 'Alice'}))
+            await handle_timezone_location(update, _context({'name': 'Alice'}))
         assert any(
             isinstance(call.kwargs.get('reply_markup'), ReplyKeyboardRemove)
             for call in update.message.reply_text.call_args_list
         )
 
-    def test_unresolvable_location_stays_on_timezone(self):
+    async def test_unresolvable_location_stays_on_timezone(self):
         # timezonefinder returns None for open ocean coordinates
         ctx = _context({'name': 'Alice'})
         with patch('bot.handlers.journal._tf') as mock_tf:
             mock_tf.timezone_at.return_value = None
-            result = handle_timezone_location(_location_update(0.0, 0.0), ctx)
+            result = await handle_timezone_location(_location_update(0.0, 0.0), ctx)
         assert result == ONBOARDING_TIMEZONE
 
-    def test_unresolvable_location_does_not_store_timezone(self):
+    async def test_unresolvable_location_does_not_store_timezone(self):
         ctx = _context({'name': 'Alice'})
         with patch('bot.handlers.journal._tf') as mock_tf:
             mock_tf.timezone_at.return_value = None
-            handle_timezone_location(_location_update(0.0, 0.0), ctx)
+            await handle_timezone_location(_location_update(0.0, 0.0), ctx)
         assert 'timezone' not in ctx.user_data
 
 
@@ -196,40 +198,40 @@ class TestHandleReminderTime:
     def _ctx(self) -> MagicMock:
         return _context({'name': 'Alice', 'timezone': 'Europe/London'})
 
-    def test_valid_time_advances_to_main_menu(self):
+    async def test_valid_time_advances_to_main_menu(self):
         with patch('bot.handlers.journal._user_svc'):
-            result = handle_reminder_time(_update('09:00'), self._ctx())
+            result = await handle_reminder_time(_update('09:00'), self._ctx())
         assert result == MAIN_MENU
 
-    def test_valid_time_saves_user(self):
+    async def test_valid_time_saves_user(self):
         with patch('bot.handlers.journal._user_svc') as mock_svc:
-            handle_reminder_time(_update('21:30'), self._ctx())
+            await handle_reminder_time(_update('21:30'), self._ctx())
         mock_svc.create_or_update.assert_called_once()
 
-    def test_no_colon_stays(self):
-        result = handle_reminder_time(_update('0900'), self._ctx())
+    async def test_no_colon_stays(self):
+        result = await handle_reminder_time(_update('0900'), self._ctx())
         assert result == ONBOARDING_TIME
 
-    def test_letters_stay(self):
-        result = handle_reminder_time(_update('nine'), self._ctx())
+    async def test_letters_stay(self):
+        result = await handle_reminder_time(_update('nine'), self._ctx())
         assert result == ONBOARDING_TIME
 
-    def test_hour_25_stays(self):
-        result = handle_reminder_time(_update('25:00'), self._ctx())
+    async def test_hour_25_stays(self):
+        result = await handle_reminder_time(_update('25:00'), self._ctx())
         assert result == ONBOARDING_TIME
 
-    def test_minute_60_stays(self):
-        result = handle_reminder_time(_update('09:60'), self._ctx())
+    async def test_minute_60_stays(self):
+        result = await handle_reminder_time(_update('09:60'), self._ctx())
         assert result == ONBOARDING_TIME
 
-    def test_boundary_midnight(self):
+    async def test_boundary_midnight(self):
         with patch('bot.handlers.journal._user_svc'):
-            result = handle_reminder_time(_update('00:00'), self._ctx())
+            result = await handle_reminder_time(_update('00:00'), self._ctx())
         assert result == MAIN_MENU
 
-    def test_boundary_last_minute_of_day(self):
+    async def test_boundary_last_minute_of_day(self):
         with patch('bot.handlers.journal._user_svc'):
-            result = handle_reminder_time(_update('23:59'), self._ctx())
+            result = await handle_reminder_time(_update('23:59'), self._ctx())
         assert result == MAIN_MENU
 
 
@@ -238,42 +240,42 @@ class TestHandleReminderTime:
 # ---------------------------------------------------------------------------
 
 class TestHandleMood:
-    def test_valid_score_advances_state(self):
+    async def test_valid_score_advances_state(self):
         ctx = _context({'name': 'Alice'})
-        result = handle_mood(_update('7'), ctx)
+        result = await handle_mood(_update('7'), ctx)
         assert result == CHECK_IN_TEXT
 
-    def test_score_stored_in_user_data(self):
+    async def test_score_stored_in_user_data(self):
         ctx = _context({'name': 'Alice'})
-        handle_mood(_update('7'), ctx)
+        await handle_mood(_update('7'), ctx)
         assert ctx.user_data['mood_score'] == 7
 
-    def test_lower_boundary_accepted(self):
-        result = handle_mood(_update('1'), _context({'name': 'A'}))
+    async def test_lower_boundary_accepted(self):
+        result = await handle_mood(_update('1'), _context({'name': 'A'}))
         assert result == CHECK_IN_TEXT
 
-    def test_upper_boundary_accepted(self):
-        result = handle_mood(_update('10'), _context({'name': 'A'}))
+    async def test_upper_boundary_accepted(self):
+        result = await handle_mood(_update('10'), _context({'name': 'A'}))
         assert result == CHECK_IN_TEXT
 
-    def test_zero_is_rejected(self):
-        result = handle_mood(_update('0'), _context())
+    async def test_zero_is_rejected(self):
+        result = await handle_mood(_update('0'), _context())
         assert result == CHECK_IN_MOOD
 
-    def test_eleven_is_rejected(self):
-        result = handle_mood(_update('11'), _context())
+    async def test_eleven_is_rejected(self):
+        result = await handle_mood(_update('11'), _context())
         assert result == CHECK_IN_MOOD
 
-    def test_non_digit_is_rejected(self):
-        result = handle_mood(_update('bad'), _context())
+    async def test_non_digit_is_rejected(self):
+        result = await handle_mood(_update('bad'), _context())
         assert result == CHECK_IN_MOOD
 
-    def test_float_is_rejected(self):
-        result = handle_mood(_update('7.5'), _context())
+    async def test_float_is_rejected(self):
+        result = await handle_mood(_update('7.5'), _context())
         assert result == CHECK_IN_MOOD
 
-    def test_empty_string_is_rejected(self):
-        result = handle_mood(_update(''), _context())
+    async def test_empty_string_is_rejected(self):
+        result = await handle_mood(_update(''), _context())
         assert result == CHECK_IN_MOOD
 
 
@@ -285,66 +287,66 @@ class TestHandleEntryTextErrors:
     def _ctx(self, mood_score: int = 7) -> MagicMock:
         return _context({'name': 'Alice', 'mood_score': mood_score})
 
-    def test_db_error_returns_main_menu(self):
+    async def test_db_error_returns_main_menu(self):
         ctx = self._ctx()
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
              patch('bot.handlers.journal._llm_svc'):
             mock_svc.save_entry.side_effect = Exception('DB down')
-            result = handle_entry_text(_update('feeling bad'), ctx)
+            result = await handle_entry_text(_update('feeling bad'), ctx)
         assert result == MAIN_MENU
 
-    def test_db_error_sends_error_message(self):
+    async def test_db_error_sends_error_message(self):
         ctx = self._ctx()
         update = _update('feeling bad')
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
              patch('bot.handlers.journal._llm_svc'):
             mock_svc.save_entry.side_effect = Exception('DB down')
-            handle_entry_text(update, ctx)
+            await handle_entry_text(update, ctx)
         from messages.strings import ERROR_GENERIC
         assert update.message.reply_text.call_args.args[0] == ERROR_GENERIC
 
 
 class TestShowHistory:
-    def test_empty_history_returns_main_menu(self):
+    async def test_empty_history_returns_main_menu(self):
         with patch('bot.handlers.journal._journal_svc') as mock_svc:
             mock_svc.get_recent_entries.return_value = []
-            result = show_history(_update(''), _context())
+            result = await show_history(_update(''), _context())
         assert result == MAIN_MENU
 
-    def test_db_error_returns_main_menu(self):
+    async def test_db_error_returns_main_menu(self):
         with patch('bot.handlers.journal._journal_svc') as mock_svc:
             mock_svc.get_recent_entries.side_effect = Exception('DB down')
-            result = show_history(_update(''), _context())
+            result = await show_history(_update(''), _context())
         assert result == MAIN_MENU
 
-    def test_db_error_sends_error_message(self):
+    async def test_db_error_sends_error_message(self):
         update = _update('')
         with patch('bot.handlers.journal._journal_svc') as mock_svc:
             mock_svc.get_recent_entries.side_effect = Exception('DB down')
-            show_history(update, _context())
+            await show_history(update, _context())
         from messages.strings import ERROR_GENERIC
         assert update.message.reply_text.call_args.args[0] == ERROR_GENERIC
 
 
 class TestShowStats:
-    def test_no_entries_returns_main_menu(self):
+    async def test_no_entries_returns_main_menu(self):
         with patch('bot.handlers.journal._journal_svc') as mock_svc:
             mock_svc.get_stats.return_value = {'total': 0, 'streak': 0, 'avg_mood': 0}
             mock_svc.get_recent_entries.return_value = []
-            result = show_stats(_update(''), _context())
+            result = await show_stats(_update(''), _context())
         assert result == MAIN_MENU
 
-    def test_db_error_returns_main_menu(self):
+    async def test_db_error_returns_main_menu(self):
         with patch('bot.handlers.journal._journal_svc') as mock_svc:
             mock_svc.get_stats.side_effect = Exception('DB down')
-            result = show_stats(_update(''), _context())
+            result = await show_stats(_update(''), _context())
         assert result == MAIN_MENU
 
-    def test_db_error_sends_error_message(self):
+    async def test_db_error_sends_error_message(self):
         update = _update('')
         with patch('bot.handlers.journal._journal_svc') as mock_svc:
             mock_svc.get_stats.side_effect = Exception('DB down')
-            show_stats(update, _context())
+            await show_stats(update, _context())
         from messages.strings import ERROR_GENERIC
         assert update.message.reply_text.call_args.args[0] == ERROR_GENERIC
 
@@ -388,71 +390,71 @@ def _entry(mood: int, days_ago: int = 0) -> dict:
 
 
 class TestShowWeeklySummary:
-    def test_no_entries_returns_main_menu(self):
+    async def test_no_entries_returns_main_menu(self):
         with patch('bot.handlers.journal._journal_svc') as mock_svc:
             mock_svc.get_weekly_entries.return_value = []
-            result = show_weekly_summary(_update(''), _context())
+            result = await show_weekly_summary(_update(''), _context())
         assert result == MAIN_MENU
 
-    def test_no_entries_sends_empty_message(self):
+    async def test_no_entries_sends_empty_message(self):
         update = _update('')
         with patch('bot.handlers.journal._journal_svc') as mock_svc:
             mock_svc.get_weekly_entries.return_value = []
-            show_weekly_summary(update, _context())
+            await show_weekly_summary(update, _context())
         from messages.strings import WEEKLY_SUMMARY_EMPTY
         assert update.message.reply_text.call_args.args[0] == WEEKLY_SUMMARY_EMPTY
 
-    def test_with_entries_returns_main_menu(self):
+    async def test_with_entries_returns_main_menu(self):
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
              patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(7), _entry(5, 1), _entry(3, 2)]
             mock_llm.get_weekly_summary.return_value = 'A good week overall.'
-            result = show_weekly_summary(_update(''), _context())
+            result = await show_weekly_summary(_update(''), _context())
         assert result == MAIN_MENU
 
-    def test_message_contains_mood_scores(self):
+    async def test_message_contains_mood_scores(self):
         update = _update('')
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
              patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(7), _entry(5, 1)]
             mock_llm.get_weekly_summary.return_value = 'Summary.'
-            show_weekly_summary(update, _context())
+            await show_weekly_summary(update, _context())
         text = update.message.reply_text.call_args.args[0]
         assert '7' in text
         assert '5' in text
 
-    def test_message_contains_mood_bar(self):
+    async def test_message_contains_mood_bar(self):
         update = _update('')
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
              patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(5)]
             mock_llm.get_weekly_summary.return_value = 'Summary.'
-            show_weekly_summary(update, _context())
+            await show_weekly_summary(update, _context())
         text = update.message.reply_text.call_args.args[0]
         assert '▓' in text
 
-    def test_enough_entries_calls_llm_summary(self):
+    async def test_enough_entries_calls_llm_summary(self):
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
              patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(7), _entry(5, 1), _entry(3, 2)]
             mock_llm.get_weekly_summary.return_value = 'Summary.'
-            show_weekly_summary(_update(''), _context())
+            await show_weekly_summary(_update(''), _context())
         mock_llm.get_weekly_summary.assert_called_once()
 
-    def test_too_few_entries_skips_llm_summary(self):
+    async def test_too_few_entries_skips_llm_summary(self):
         update = _update('')
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
              patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(5), _entry(4, 1)]
-            show_weekly_summary(update, _context())
+            await show_weekly_summary(update, _context())
         mock_llm.get_weekly_summary.assert_not_called()
         from messages.strings import WEEKLY_SUMMARY_TOO_FEW
         assert WEEKLY_SUMMARY_TOO_FEW in update.message.reply_text.call_args.args[0]
 
-    def test_db_error_returns_main_menu(self):
+    async def test_db_error_returns_main_menu(self):
         with patch('bot.handlers.journal._journal_svc') as mock_svc:
             mock_svc.get_weekly_entries.side_effect = Exception('DB down')
-            result = show_weekly_summary(_update(''), _context())
+            result = await show_weekly_summary(_update(''), _context())
         assert result == MAIN_MENU
 
 
@@ -461,7 +463,7 @@ class TestShowWeeklySummary:
 # ---------------------------------------------------------------------------
 
 class TestHandleEntryTextGuidance:
-    def _run(self, mood_score: int) -> tuple:
+    async def _run(self, mood_score: int) -> tuple:
         ctx = _context({'name': 'Alice', 'mood_score': mood_score})
         update = _update('I feel awful')
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
@@ -469,35 +471,35 @@ class TestHandleEntryTextGuidance:
             mock_svc.get_stats.return_value = {'streak': 1, 'total': 1, 'avg_mood': mood_score}
             mock_llm.extract_tags.return_value = []
             mock_llm.get_empathetic_response.return_value = 'Hang in there.'
-            result = handle_entry_text(update, ctx)
+            result = await handle_entry_text(update, ctx)
         return result, ctx
 
-    def test_score_5_returns_main_menu(self):
-        result, _ = self._run(5)
+    async def test_score_5_returns_main_menu(self):
+        result, _ = await self._run(5)
         assert result == MAIN_MENU
 
-    def test_score_10_returns_main_menu(self):
-        result, _ = self._run(10)
+    async def test_score_10_returns_main_menu(self):
+        result, _ = await self._run(10)
         assert result == MAIN_MENU
 
-    def test_score_4_triggers_guidance_offer(self):
-        result, _ = self._run(4)
+    async def test_score_4_triggers_guidance_offer(self):
+        result, _ = await self._run(4)
         assert result == CHECK_IN_GUIDANCE_OFFER
 
-    def test_score_3_triggers_guidance_offer(self):
-        result, _ = self._run(3)
+    async def test_score_3_triggers_guidance_offer(self):
+        result, _ = await self._run(3)
         assert result == CHECK_IN_GUIDANCE_OFFER
 
-    def test_score_1_triggers_guidance_offer(self):
-        result, _ = self._run(1)
+    async def test_score_1_triggers_guidance_offer(self):
+        result, _ = await self._run(1)
         assert result == CHECK_IN_GUIDANCE_OFFER
 
-    def test_low_mood_stores_entry_text(self):
-        _, ctx = self._run(3)
+    async def test_low_mood_stores_entry_text(self):
+        _, ctx = await self._run(3)
         assert ctx.user_data.get('entry_text') == 'I feel awful'
 
-    def test_high_mood_does_not_store_entry_text(self):
-        _, ctx = self._run(7)
+    async def test_high_mood_does_not_store_entry_text(self):
+        _, ctx = await self._run(7)
         assert 'entry_text' not in ctx.user_data
 
 
@@ -512,7 +514,7 @@ class TestCrisisResourceDelivery:
     def _sent(self, update) -> list:
         return [c.args[0] for c in update.message.reply_text.call_args_list]
 
-    def _run(self, mood_score: int, svc_error: Exception | None = None) -> MagicMock:
+    async def _run(self, mood_score: int, svc_error: Exception | None = None) -> MagicMock:
         ctx = _context({'name': 'Alice', 'mood_score': mood_score})
         update = _update('I feel awful')
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
@@ -523,29 +525,29 @@ class TestCrisisResourceDelivery:
                 mock_llm.extract_tags.return_value = []
             mock_svc.get_stats.return_value = {'streak': 1, 'total': 1, 'avg_mood': mood_score}
             mock_llm.get_empathetic_response.return_value = 'Hang in there.'
-            handle_entry_text(update, ctx)
+            await handle_entry_text(update, ctx)
         return update
 
-    def test_score_2_receives_crisis_resources(self):
-        update = self._run(2)
+    async def test_score_2_receives_crisis_resources(self):
+        update = await self._run(2)
         assert GUIDANCE_CRISIS_RESOURCES in self._sent(update)
 
-    def test_score_1_receives_crisis_resources(self):
-        update = self._run(1)
+    async def test_score_1_receives_crisis_resources(self):
+        update = await self._run(1)
         assert GUIDANCE_CRISIS_RESOURCES in self._sent(update)
 
-    def test_score_3_does_not_receive_crisis_resources(self):
-        update = self._run(3)
+    async def test_score_3_does_not_receive_crisis_resources(self):
+        update = await self._run(3)
         assert GUIDANCE_CRISIS_RESOURCES not in self._sent(update)
 
-    def test_delivered_even_when_the_check_in_fails(self):
+    async def test_delivered_even_when_the_check_in_fails(self):
         """The regression this fix exists for: a Mongo or LLM failure used to
         return ERROR_GENERIC and MAIN_MENU, skipping the crisis path entirely."""
-        update = self._run(1, svc_error=Exception('DB down'))
+        update = await self._run(1, svc_error=Exception('DB down'))
         assert GUIDANCE_CRISIS_RESOURCES in self._sent(update)
 
-    def test_delivered_before_anything_that_can_fail(self):
-        update = self._run(1)
+    async def test_delivered_before_anything_that_can_fail(self):
+        update = await self._run(1)
         assert self._sent(update)[0] == GUIDANCE_CRISIS_RESOURCES
 
     def test_help_message_carries_crisis_resources(self):
@@ -564,31 +566,31 @@ class TestCrisisResourceDelivery:
 # ---------------------------------------------------------------------------
 
 class TestPrivacyNotice:
-    def test_new_user_sees_it_before_being_asked_anything(self):
+    async def test_new_user_sees_it_before_being_asked_anything(self):
         from messages.strings import PRIVACY_NOTICE
         update = _update('/start')
         with patch('bot.handlers.journal._user_svc') as mock_svc:
             mock_svc.get.return_value = None
-            result = start(update, _context())
+            result = await start(update, _context())
         sent = [c.args[0] for c in update.message.reply_text.call_args_list]
         assert PRIVACY_NOTICE in sent
         assert result == ONBOARDING_NAME
 
-    def test_returning_user_is_not_shown_it_again(self):
+    async def test_returning_user_is_not_shown_it_again(self):
         from messages.strings import PRIVACY_NOTICE
         update = _update('/start')
         with patch('bot.handlers.journal._user_svc') as mock_svc:
             mock_svc.get.return_value = {'name': 'Alice', 'onboarded': True}
-            result = start(update, _context())
+            result = await start(update, _context())
         sent = [c.args[0] for c in update.message.reply_text.call_args_list]
         assert PRIVACY_NOTICE not in sent
         assert result == MAIN_MENU
 
-    def test_privacy_command_repeats_it(self):
+    async def test_privacy_command_repeats_it(self):
         from bot.handlers.commands import privacy_command
         from messages.strings import PRIVACY_NOTICE
         update = _update('/privacy')
-        privacy_command(update, _context())
+        await privacy_command(update, _context())
         assert update.message.reply_text.call_args.args[0] == PRIVACY_NOTICE
 
     def test_help_points_at_it(self):
@@ -607,30 +609,30 @@ class TestPrivacyNotice:
 # ---------------------------------------------------------------------------
 
 class TestMissingMoodScore:
-    def test_entry_text_re_asks_instead_of_assuming(self):
+    async def test_entry_text_re_asks_instead_of_assuming(self):
         update = _update('I feel awful')
         with patch('bot.handlers.journal._journal_svc') as mock_svc, \
              patch('bot.handlers.journal._llm_svc') as mock_llm:
-            result = handle_entry_text(update, _context({'name': 'Alice'}))
+            result = await handle_entry_text(update, _context({'name': 'Alice'}))
         assert result == CHECK_IN_MOOD
         mock_svc.save_entry.assert_not_called()
         mock_llm.extract_tags.assert_not_called()
 
-    def test_entry_text_tells_the_user_it_was_not_saved(self):
+    async def test_entry_text_tells_the_user_it_was_not_saved(self):
         from messages.strings import MOOD_LOST
         update = _update('I feel awful')
         with patch('bot.handlers.journal._journal_svc'), \
              patch('bot.handlers.journal._llm_svc'):
-            handle_entry_text(update, _context({'name': 'Alice'}))
+            await handle_entry_text(update, _context({'name': 'Alice'}))
         assert update.message.reply_text.call_args.args[0] == MOOD_LOST
 
-    def test_guidance_offer_shows_crisis_resources(self):
+    async def test_guidance_offer_shows_crisis_resources(self):
         """This state is only reachable from a low-mood check-in, so a missing
         score means lost state rather than a well user."""
         from bot.keyboards import GUIDANCE_NO
         update = _update(GUIDANCE_NO)
         with patch('bot.handlers.journal._llm_svc'):
-            result = handle_guidance_offer(update, _context({'entry_text': 'rough'}))
+            result = await handle_guidance_offer(update, _context({'entry_text': 'rough'}))
         sent = [c.args[0] for c in update.message.reply_text.call_args_list]
         assert GUIDANCE_CRISIS_RESOURCES in sent
         assert result == MAIN_MENU
@@ -644,51 +646,94 @@ class TestHandleGuidanceOffer:
     def _ctx(self, mood_score: int = 3) -> MagicMock:
         return _context({'mood_score': mood_score, 'entry_text': 'feeling rough', 'name': 'Alice'})
 
-    def test_yes_returns_main_menu(self):
+    async def test_yes_returns_main_menu(self):
         from bot.keyboards import GUIDANCE_YES
         with patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try deep breathing.'
-            result = handle_guidance_offer(_update(GUIDANCE_YES), self._ctx())
+            result = await handle_guidance_offer(_update(GUIDANCE_YES), self._ctx())
         assert result == MAIN_MENU
 
-    def test_yes_calls_llm(self):
+    async def test_yes_calls_llm(self):
         from bot.keyboards import GUIDANCE_YES
         with patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try deep breathing.'
-            handle_guidance_offer(_update(GUIDANCE_YES), self._ctx())
+            await handle_guidance_offer(_update(GUIDANCE_YES), self._ctx())
         mock_llm.get_psychological_guidance.assert_called_once_with(3, 'feeling rough')
 
-    def test_no_returns_main_menu(self):
+    async def test_no_returns_main_menu(self):
         from bot.keyboards import GUIDANCE_NO
-        result = handle_guidance_offer(_update(GUIDANCE_NO), self._ctx())
+        result = await handle_guidance_offer(_update(GUIDANCE_NO), self._ctx())
         assert result == MAIN_MENU
 
-    def test_no_skips_llm(self):
+    async def test_no_skips_llm(self):
         from bot.keyboards import GUIDANCE_NO
         with patch('bot.handlers.journal._llm_svc') as mock_llm:
-            handle_guidance_offer(_update(GUIDANCE_NO), self._ctx())
+            await handle_guidance_offer(_update(GUIDANCE_NO), self._ctx())
         mock_llm.get_psychological_guidance.assert_not_called()
 
-    def test_any_other_text_treated_as_decline(self):
-        result = handle_guidance_offer(_update('random text'), self._ctx())
+    async def test_any_other_text_treated_as_decline(self):
+        result = await handle_guidance_offer(_update('random text'), self._ctx())
         assert result == MAIN_MENU
 
-    def test_crisis_resources_are_not_repeated_here(self):
+    async def test_crisis_resources_are_not_repeated_here(self):
         """handle_entry_text now delivers them unconditionally at mood <= 2,
         before this opt-in is ever offered. See TestCrisisResourceDelivery."""
         from bot.keyboards import GUIDANCE_YES
         update = _update(GUIDANCE_YES)
         with patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try cold water.'
-            handle_guidance_offer(update, self._ctx(mood_score=2))
+            await handle_guidance_offer(update, self._ctx(mood_score=2))
         sent = [c.args[0] for c in update.message.reply_text.call_args_list]
         assert GUIDANCE_CRISIS_RESOURCES not in sent
 
-    def test_score_3_does_not_append_crisis_resources(self):
+    async def test_score_3_does_not_append_crisis_resources(self):
         from bot.keyboards import GUIDANCE_YES
         update = _update(GUIDANCE_YES)
         with patch('bot.handlers.journal._llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try deep breathing.'
-            handle_guidance_offer(update, self._ctx(mood_score=3))
+            await handle_guidance_offer(update, self._ctx(mood_score=3))
         sent_text = update.message.reply_text.call_args.args[0]
         assert GUIDANCE_CRISIS_RESOURCES not in sent_text
+
+
+# ---------------------------------------------------------------------------
+# Migration guard — v20+ requires coroutine callbacks
+#
+# A handler that is accidentally left synchronous still registers fine and only
+# fails when a user reaches it, so assert the shape here instead.
+# ---------------------------------------------------------------------------
+
+class TestHandlersAreCoroutines:
+    def test_every_registered_handler_is_async(self):
+        import inspect
+        from bot.handlers import commands, journal
+
+        callbacks = [
+            journal.start,
+            journal.handle_name,
+            journal.handle_timezone,
+            journal.handle_timezone_location,
+            journal.handle_reminder_time,
+            journal.handle_main_menu,
+            journal.handle_mood,
+            journal.handle_entry_text,
+            journal.show_history,
+            journal.show_stats,
+            journal.show_weekly_summary,
+            journal.handle_guidance_offer,
+            journal.cancel,
+            commands.help_command,
+            commands.privacy_command,
+        ]
+        not_async = [c.__name__ for c in callbacks if not inspect.iscoroutinefunction(c)]
+        assert not_async == []
+
+    def test_register_accepts_an_application(self):
+        """`dispatcher.add_handler` is gone in v20+; registration goes through
+        Application. Passing a mock proves the call shape, not the wiring."""
+        from bot.handlers import commands, journal
+
+        app = MagicMock()
+        journal.register(app)
+        commands.register(app)
+        assert app.add_handler.call_count == 3
