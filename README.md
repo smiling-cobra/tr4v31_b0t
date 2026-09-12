@@ -30,6 +30,9 @@ fly secrets set ANTHROPIC_MODEL=<your-enabled-model-id>
 
 ## Deployment
 
+Pushing to `master` runs lint and tests, and deploys to Fly only if they pass
+(`.github/workflows/fly-deploy.yml`). There is no manual step in the normal path.
+
 The bot polls Telegram with `getUpdates`, which permits exactly one consumer per
 token. Two running machines means two pollers, 409 Conflict responses, and
 duplicate reminders — so the app must stay at a single instance:

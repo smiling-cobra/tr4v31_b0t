@@ -2,10 +2,10 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - master
-      - main
+  # Called by fly-deploy.yml on pushes to master, so a push runs this once and
+  # deploys only if it passes — rather than running it twice in parallel with
+  # the deploy it is supposed to gate.
+  workflow_call:
 
 jobs:
   lint-and-test:

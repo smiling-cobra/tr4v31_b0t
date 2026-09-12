@@ -50,7 +50,9 @@ Then, in order
 
 **The migration goes before the timestamp fix.** `services/journal_service.py` and `services/scheduler_service.py` import no telegram symbols, so landing the timestamp work first buys almost no merge-conflict avoidance. Meanwhile the migration is the schedule-dominating unknown — the one item with zero product value and unbounded regression risk. Run it against the current green 143-test baseline so the suite acts as a clean safety net, and discover its true cost in week one rather than week three. Item 1's tests then get written once, under the framework you are actually shipping on.
 
-**Persistence (7) must precede instrumentation (4).** CI deploys on every push to `main` with no gate, and every deploy wipes conversation state. Instrumenting first means measuring your own deploy cadence rather than your users' behaviour.
+**Persistence (7) must precede instrumentation (4).** Every deploy wipes conversation state, and deploys are now automatic on every push to `master`. Instrumenting first means measuring your own deploy cadence rather than your users' behaviour.
+
+_(Corrected after Week 0: this originally said CI deploys on every push to `main` with no gate. In fact `fly-deploy.yml` was keyed to a `main` branch that has never existed, so auto-deploy had never once run — deploys were manual. P1 added the gate and the branch name was fixed to `master`, which is what makes the statement above true going forward.)_
 
 **Tag normalisation (5) is a dependency of the export (8)**, not a parallel nicety. Unnormalised free-text tags are precisely what makes a summary illegible to a clinician.
 
