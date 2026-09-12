@@ -20,7 +20,7 @@ telegram_bot_token = os.environ.get('TELEGRAM_TOKEN')
 
 
 def main() -> None:
-    get_db()  # fail fast on a missing or unreachable MONGODB_URI, not on the first check-in
+    get_db()  # fail fast on a missing MONGODB_URI, not on the first check-in
 
     application = Application.builder().token(telegram_bot_token).build()
 

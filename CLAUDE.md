@@ -35,6 +35,7 @@ User (Telegram) → Handlers → Services → LLM / DB
 **Async rule**: handlers and scheduler callbacks are coroutines sharing one event loop. The services stay
 synchronous, so every call into them from a handler or the scheduler tick goes through `asyncio.to_thread`.
 A blocking Anthropic or pymongo call left on the loop stalls the bot for every user, not just the caller.
+This keeps the loop responsive; it does not make updates concurrent. Updates are still processed one at a time.
 
 **Conversation flow** (`bot/handlers/journal.py`):
 
