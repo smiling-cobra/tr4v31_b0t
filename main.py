@@ -9,6 +9,12 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()]
 )
 
+# httpx logs every request URL at INFO, and Telegram carries the bot token in
+# the URL path — so at the root INFO level each getUpdates poll writes the token
+# to the logs a few times a minute. Nothing below WARNING from httpx is worth
+# that. python-telegram-bot v13 used urllib3 and never logged this.
+logging.getLogger('httpx').setLevel(logging.WARNING)
+
 load_dotenv()
 
 from telegram.ext import Application
