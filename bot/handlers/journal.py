@@ -67,6 +67,7 @@ from messages.strings import (
 )
 from services.journal_service import JournalService
 from services.llm_service import LlmService
+from services.time_utils import resolve_timezone, to_local
 from services.user_service import UserService
 
 logger = logging.getLogger(__name__)
@@ -303,6 +304,7 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     telegram_id = update.effective_user.id
     try:
         entries = await asyncio.to_thread(_journal_svc.get_recent_entries, telegram_id)
+        tz = await _user_timezone(telegram_id)
     except Exception:
         logger.exception('Failed to load history for user %s', telegram_id)
         await update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
@@ -316,7 +318,7 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     body = HISTORY_HEADER.format(count=len(entries))
     for e in entries:
-        date_str = e['created_at'].strftime('%d %b %Y')
+        date_str = to_local(e['created_at'], tz).strftime('%d %b %Y')
         body += HISTORY_ENTRY.format(date=date_str, score=e['mood_score'], text=_escape_md(e['text'][:200]))
 
     await update.message.reply_text(body, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
@@ -356,6 +358,13 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 _MIN_ENTRIES_FOR_LLM_SUMMARY = 3
 
 
+async def _user_timezone(telegram_id: int):
+    """The user's timezone for date labels, so a stored UTC instant is shown as
+    the day they experienced it."""
+    user = await asyncio.to_thread(_user_svc.get, telegram_id) or {}
+    return resolve_timezone(user.get('timezone'), telegram_id)
+
+
 def _mood_bar(score: int) -> str:
     n = max(0, min(10, score))
     return '▓' * n + '░' * (10 - n)
@@ -364,7 +373,12 @@ def _mood_bar(score: int) -> str:
 async def show_weekly_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     telegram_id = update.effective_user.id
     try:
-        entries = await asyncio.to_thread(_journal_svc.get_weekly_entries, telegram_id)
+        user = await asyncio.to_thread(_user_svc.get, telegram_id) or {}
+        user_timezone = user.get('timezone')
+        tz = resolve_timezone(user_timezone, telegram_id)
+        entries = await asyncio.to_thread(
+            _journal_svc.get_weekly_entries, telegram_id, user_timezone
+        )
     except Exception:
         logger.exception('Failed to load weekly entries for user %s', telegram_id)
         await update.message.reply_text(ERROR_GENERIC, reply_markup=get_main_menu_keyboard())
@@ -376,15 +390,15 @@ async def show_weekly_summary(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return MAIN_MENU
 
-    date_from = entries[0]['created_at'].strftime('%d %b')
-    date_to = entries[-1]['created_at'].strftime('%d %b')
+    date_from = to_local(entries[0]['created_at'], tz).strftime('%d %b')
+    date_to = to_local(entries[-1]['created_at'], tz).strftime('%d %b')
     body = WEEKLY_SUMMARY_HEADER.format(date_from=date_from, date_to=date_to, count=len(entries))
 
     for e in entries:
         body += WEEKLY_SUMMARY_TREND_ROW.format(
             score=e['mood_score'],
             bar=_mood_bar(e['mood_score']),
-            day=e['created_at'].strftime('%a %d %b'),
+            day=to_local(e['created_at'], tz).strftime('%a %d %b'),
         )
 
     all_tags = [tag for e in entries for tag in e.get('tags', [])]

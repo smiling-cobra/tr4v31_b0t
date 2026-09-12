@@ -31,6 +31,7 @@ from bot.handlers.journal import (
     start,
 )
 from messages.strings import GUIDANCE_CRISIS_RESOURCES
+from repositories.user_repo import UserRepository
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +59,21 @@ def _context(user_data: dict | None = None) -> MagicMock:
     c = MagicMock()
     c.user_data = user_data if user_data is not None else {}
     return c
+
+
+def _set_user_timezone(name: str, user_id: int = 12345) -> None:
+    UserRepository().save({'telegram_id': user_id, 'timezone': name, 'onboarded': True})
+
+
+async def _history_text(created_at: datetime = datetime(2026, 3, 26, 11, 0)) -> str:
+    """Render the history view for a single entry stored at the given UTC instant."""
+    update = _update('')
+    with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        mock_svc.get_recent_entries.return_value = [
+            {'mood_score': 5, 'text': 'late night', 'tags': [], 'created_at': created_at}
+        ]
+        await show_history(update, _context())
+    return update.message.reply_text.call_args.args[0]
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +343,16 @@ class TestShowHistory:
         from messages.strings import ERROR_GENERIC
         assert update.message.reply_text.call_args.args[0] == ERROR_GENERIC
 
+    async def test_dates_render_in_the_users_timezone(self):
+        # Kiritimati is UTC+14, so 11:00 UTC on the 26th is 01:00 on the 27th there.
+        _set_user_timezone('Pacific/Kiritimati')
+        text = await _history_text()
+        assert '27 Mar 2026' in text
+
+    async def test_dates_fall_back_to_utc_without_a_timezone(self):
+        text = await _history_text()
+        assert '26 Mar 2026' in text
+
 
 class TestShowStats:
     async def test_no_entries_returns_main_menu(self):
@@ -456,6 +482,27 @@ class TestShowWeeklySummary:
             mock_svc.get_weekly_entries.side_effect = Exception('DB down')
             result = await show_weekly_summary(_update(''), _context())
         assert result == MAIN_MENU
+
+    async def test_day_labels_render_in_the_users_timezone(self):
+        # Kiritimati is UTC+14: 11:00 UTC on the 26th is the 27th locally.
+        _set_user_timezone('Pacific/Kiritimati')
+        update = _update('')
+        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
+             patch('bot.handlers.journal._llm_svc') as mock_llm:
+            mock_svc.get_weekly_entries.return_value = [
+                {'mood_score': 5, 'text': 'x', 'tags': [],
+                 'created_at': datetime(2026, 3, 26, 11, 0)}
+            ]
+            mock_llm.get_weekly_summary.return_value = 'Summary.'
+            await show_weekly_summary(update, _context())
+        assert '27 Mar' in update.message.reply_text.call_args.args[0]
+
+    async def test_stored_timezone_is_passed_to_the_query(self):
+        _set_user_timezone('Pacific/Kiritimati')
+        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+            mock_svc.get_weekly_entries.return_value = []
+            await show_weekly_summary(_update(''), _context())
+        assert mock_svc.get_weekly_entries.call_args.args[1] == 'Pacific/Kiritimati'
 
 
 # ---------------------------------------------------------------------------

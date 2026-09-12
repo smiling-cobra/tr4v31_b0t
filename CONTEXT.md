@@ -37,7 +37,8 @@ Out of scope:
 - Mood Score: An integer from 1 to 10 representing how the user feels at check-in time.
 - Journal Entry: A saved record containing user text, mood score, extracted tags, and creation time.
 - Tags: Short themes or triggers extracted from an entry to support pattern recognition.
-- Streak: The count of consecutive days with at least one check-in.
+- Local Day: The calendar day in the user's own timezone. Every day-based rule — streaks, weekly windows, date labels — is evaluated against this, never against the UTC day.
+- Streak: The count of consecutive local days with at least one check-in.
 - Weekly Summary: A reflection surface that combines the week's mood trend, top tags, and a short LLM-written synthesis.
 - Guidance Offer: The follow-up prompt shown after a low-mood check-in, asking whether the user wants concrete coping suggestions.
 - Psychological Guidance: Evidence-based, non-clinical coping suggestions generated for low-mood entries.
@@ -115,7 +116,9 @@ Cross-context changes should preserve the domain vocabulary in this file.
 - Reminder times must be stored as valid HH:MM 24-hour strings.
 - Timezones must resolve to valid IANA timezone identifiers before onboarding completes.
 - Recent history is a reverse-chronological view of saved entries.
-- Weekly summary data is built from entries within the last 7 days.
+- Entry and streak timestamps are stored as UTC instants. Timezone is a property of how a stored instant is read, not of how it is written.
+- Weekly summary data is built from entries within the last 7 local days, today included, starting at local midnight rather than 168 hours back.
+- Dates shown to a user are rendered in that user's timezone, so a label never disagrees with the day they lived through.
 - Average mood is derived from saved entries and rounded for display.
 
 ## Domain Invariants
@@ -123,9 +126,10 @@ Cross-context changes should preserve the domain vocabulary in this file.
 - Mood scores must remain in the 1 to 10 range.
 - Users must complete onboarding before normal main-menu use.
 - The first recorded check-in starts a streak at 1.
-- Multiple check-ins on the same day do not increment a streak more than once.
-- A next-day check-in increments the streak by 1.
-- A gap of more than one day resets the streak to 1.
+- Multiple check-ins on the same local day do not increment a streak more than once.
+- A next-local-day check-in increments the streak by 1.
+- A gap of more than one local day resets the streak to 1.
+- An absent or malformed timezone degrades day boundaries to UTC rather than rejecting the check-in. A streak is not a safety decision, so it fails open; the scheduler deliberately does not share this policy, because a guessed timezone there would message someone in the middle of their night.
 - History, stats, reminders, and weekly summaries are user-scoped.
 - Weekly narrative synthesis is only generated when there are enough recent entries.
 - Crisis hotline text is supplied by application logic, not by the LLM prompt.

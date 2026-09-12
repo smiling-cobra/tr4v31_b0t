@@ -74,7 +74,9 @@ class SchedulerService:
                     logger.exception('Failed to send weekly summary to user %s.', user['telegram_id'])
 
     async def _send_weekly_summary(self, context, user: dict) -> None:
-        entries = await asyncio.to_thread(self._journal_svc.get_weekly_entries, user['telegram_id'])
+        entries = await asyncio.to_thread(
+            self._journal_svc.get_weekly_entries, user['telegram_id'], user['timezone']
+        )
         if len(entries) < _MIN_ENTRIES_FOR_WEEKLY_SUMMARY:
             return
         summary = await asyncio.to_thread(self._llm_svc.get_weekly_summary, entries)
