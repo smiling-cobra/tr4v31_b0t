@@ -1,19 +1,25 @@
-"""Tests for JournalService — streak logic and stats aggregation.
+"""Tests for JournalService — streak logic, weekly windows and stats.
 
 Streak rules under test:
   - First entry ever       → streak = 1
   - Second entry same day  → streak unchanged
   - Entry the next day     → streak + 1
   - Entry after a gap > 1d → streak resets to 1
+
+"Day" means the user's local day, not the UTC day. The TestTimezoneBoundaries
+class pins that distinction down: the two cases there pass in a UTC-keyed
+implementation only by accident of the tester's own offset.
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
 
+from repositories.user_repo import UserRepository
 from services.journal_service import JournalService
 
 USER = 111111
+UTC = timezone.utc
 
 
 @pytest.fixture
@@ -21,12 +27,19 @@ def svc():
     return JournalService()
 
 
-def _save_on(svc: JournalService, d: date, mood: int = 5, text: str = "entry") -> None:
-    """Save an entry as if it happened on the given date."""
-    dt = datetime(d.year, d.month, d.day, 10, 0)
-    with patch('services.journal_service.datetime') as mock_dt:
-        mock_dt.utcnow.return_value = dt
+def _set_timezone(name: str) -> None:
+    UserRepository().save({'telegram_id': USER, 'timezone': name, 'onboarded': True})
+
+
+def _save_at(svc: JournalService, moment: datetime, mood: int = 5, text: str = "entry") -> None:
+    """Save an entry as if the clock read this exact UTC instant."""
+    with patch('services.time_utils.now', return_value=moment):
         svc.save_entry(USER, mood, text)
+
+
+def _save_on(svc: JournalService, d: date, mood: int = 5, text: str = "entry") -> None:
+    """Save an entry as if it happened at 10:00 UTC on the given date."""
+    _save_at(svc, datetime(d.year, d.month, d.day, 10, 0, tzinfo=UTC), mood, text)
 
 
 class TestStreakLogic:
@@ -61,23 +74,64 @@ class TestStreakLogic:
         assert svc.get_stats(USER)['streak'] == 2
 
 
+class TestTimezoneBoundaries:
+    """Day boundaries follow the user, not UTC."""
+
+    def test_one_utc_day_spanning_two_local_days_increments(self, svc):
+        # Kiritimati is UTC+14, so a single UTC day straddles two local days.
+        _set_timezone('Pacific/Kiritimati')
+        _save_at(svc, datetime(2026, 3, 26, 9, 0, tzinfo=UTC))   # local 26th, 23:00
+        _save_at(svc, datetime(2026, 3, 26, 11, 0, tzinfo=UTC))  # local 27th, 01:00
+        assert svc.get_stats(USER)['streak'] == 2
+
+    def test_two_utc_days_inside_one_local_day_does_not_increment(self, svc):
+        # Niue is UTC-11, so one local day straddles two UTC days.
+        _set_timezone('Pacific/Niue')
+        _save_at(svc, datetime(2026, 3, 26, 22, 0, tzinfo=UTC))  # local 26th, 11:00
+        _save_at(svc, datetime(2026, 3, 27, 9, 0, tzinfo=UTC))   # local 26th, 22:00
+        assert svc.get_stats(USER)['streak'] == 1
+
+    def test_missing_timezone_falls_back_to_utc(self, svc):
+        # No user record at all — the pre-existing UTC behaviour is preserved.
+        _save_at(svc, datetime(2026, 3, 26, 9, 0, tzinfo=UTC))
+        _save_at(svc, datetime(2026, 3, 26, 11, 0, tzinfo=UTC))
+        assert svc.get_stats(USER)['streak'] == 1
+
+    def test_malformed_timezone_falls_back_to_utc(self, svc):
+        _set_timezone('Not/ARealZone')
+        _save_at(svc, datetime(2026, 3, 26, 9, 0, tzinfo=UTC))
+        _save_at(svc, datetime(2026, 3, 26, 11, 0, tzinfo=UTC))
+        assert svc.get_stats(USER)['streak'] == 1
+
+    def test_stored_timestamps_stay_utc(self, svc):
+        _set_timezone('Pacific/Kiritimati')
+        moment = datetime(2026, 3, 26, 9, 0, tzinfo=UTC)
+        _save_at(svc, moment)
+        stored = svc.get_recent_entries(USER)[0]['created_at']
+        if stored.tzinfo is None:  # what pymongo hands back in production
+            stored = stored.replace(tzinfo=UTC)
+        assert stored == moment
+
+
 class TestWeeklyEntries:
+    def _frozen(self, svc, now, **kwargs):
+        with patch('services.time_utils.now', return_value=now):
+            return svc.get_weekly_entries(USER, **kwargs)
+
     def test_returns_entries_within_last_7_days(self, svc):
-        today = datetime.utcnow().date()
+        today = datetime.now(UTC).date()
         _save_on(svc, today)
         _save_on(svc, today - timedelta(days=6))
-        entries = svc.get_weekly_entries(USER)
-        assert len(entries) == 2
+        assert len(svc.get_weekly_entries(USER)) == 2
 
     def test_excludes_entries_older_than_7_days(self, svc):
-        today = datetime.utcnow().date()
+        today = datetime.now(UTC).date()
         _save_on(svc, today)
         _save_on(svc, today - timedelta(days=8))
-        entries = svc.get_weekly_entries(USER)
-        assert len(entries) == 1
+        assert len(svc.get_weekly_entries(USER)) == 1
 
     def test_returns_entries_in_ascending_order(self, svc):
-        today = datetime.utcnow().date()
+        today = datetime.now(UTC).date()
         _save_on(svc, today - timedelta(days=2), mood=3)
         _save_on(svc, today, mood=7)
         entries = svc.get_weekly_entries(USER)
@@ -89,9 +143,28 @@ class TestWeeklyEntries:
 
     def test_is_user_scoped(self, svc):
         other = 999999
-        today = datetime.utcnow().date()
-        _save_on(svc, today)
+        _save_on(svc, datetime.now(UTC).date())
         assert svc.get_weekly_entries(other) == []
+
+    def test_window_starts_at_local_midnight(self, svc):
+        # Kiritimati is UTC+14. With the clock at 2026-03-26 00:00 UTC it is
+        # already 14:00 on the 26th locally, so the window opens at local
+        # midnight on the 20th — 2026-03-19 10:00 UTC.
+        _set_timezone('Pacific/Kiritimati')
+        _save_at(svc, datetime(2026, 3, 19, 12, 0, tzinfo=UTC), mood=7)  # local 20th → in
+        _save_at(svc, datetime(2026, 3, 19, 8, 0, tzinfo=UTC), mood=3)   # local 19th → out
+
+        entries = self._frozen(svc, datetime(2026, 3, 26, 0, 0, tzinfo=UTC))
+        assert [e['mood_score'] for e in entries] == [7]
+
+    def test_explicit_timezone_argument_is_used(self, svc):
+        # The scheduler passes the timezone it already holds; no user record here.
+        _save_at(svc, datetime(2026, 3, 19, 12, 0, tzinfo=UTC), mood=7)
+        _save_at(svc, datetime(2026, 3, 19, 8, 0, tzinfo=UTC), mood=3)
+
+        now = datetime(2026, 3, 26, 0, 0, tzinfo=UTC)
+        entries = self._frozen(svc, now, user_timezone='Pacific/Kiritimati')
+        assert [e['mood_score'] for e in entries] == [7]
 
 
 class TestStats:
