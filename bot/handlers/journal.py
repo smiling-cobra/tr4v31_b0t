@@ -28,6 +28,7 @@ from bot.keyboards import (
     CHECK_IN, GUIDANCE_YES, HELP, HISTORY, STATS, WEEKLY_SUMMARY,
     get_guidance_keyboard, get_main_menu_keyboard, get_mood_keyboard, get_timezone_keyboard,
 )
+from messages.markdown import escape_md
 from messages.strings import (
     CANCEL_MESSAGE,
     CHECK_IN_DONE,
@@ -65,20 +66,12 @@ from messages.strings import (
     WRONG_TIME,
     WRONG_TIMEZONE,
 )
-from services.journal_service import JournalService
+from services.journal_service import JournalService, MIN_ENTRIES_FOR_WEEKLY_SUMMARY
 from services.llm_service import LlmService
 from services.time_utils import resolve_timezone, to_local
 from services.user_service import UserService
 
 logger = logging.getLogger(__name__)
-
-_MD_SPECIAL = re.compile(r'([_*`\[])')
-
-
-def _escape_md(text: str) -> str:
-    """Escape Markdown v1 special characters in user-supplied or external text."""
-    return _MD_SPECIAL.sub(r'\\\1', text)
-
 
 _tf = TimezoneFinder()
 _ALL_TIMEZONES = sorted(available_timezones())
@@ -146,7 +139,7 @@ async def handle_timezone_location(update: Update, context: ContextTypes.DEFAULT
         return ONBOARDING_TIMEZONE
     context.user_data['timezone'] = tz_str
     await update.message.reply_text(
-        TIMEZONE_DETECTED.format(timezone=_escape_md(tz_str)),
+        TIMEZONE_DETECTED.format(timezone=escape_md(tz_str)),
         parse_mode='Markdown',
         reply_markup=get_timezone_keyboard(),
     )
@@ -171,7 +164,7 @@ async def handle_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if len(matches) == 1:
         context.user_data['timezone'] = matches[0]
         await update.message.reply_text(
-            TIMEZONE_DETECTED.format(timezone=_escape_md(matches[0])),
+            TIMEZONE_DETECTED.format(timezone=escape_md(matches[0])),
             parse_mode='Markdown',
         )
         await update.message.reply_text(ONBOARDING_TIME_MSG, reply_markup=ReplyKeyboardRemove())
@@ -206,7 +199,7 @@ async def handle_reminder_time(update: Update, context: ContextTypes.DEFAULT_TYP
         onboarded=True,
     )
     await update.message.reply_text(
-        ONBOARDING_DONE.format(name=_escape_md(name), reminder_time=time_str, timezone=timezone),
+        ONBOARDING_DONE.format(name=escape_md(name), reminder_time=time_str, timezone=timezone),
         reply_markup=get_main_menu_keyboard(),
         parse_mode='Markdown',
     )
@@ -286,7 +279,7 @@ async def handle_entry_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return MAIN_MENU
 
     await update.message.reply_text(
-        CHECK_IN_DONE.format(name=_escape_md(name), llm_response=_escape_md(llm_response), streak=stats['streak']),
+        CHECK_IN_DONE.format(name=escape_md(name), llm_response=escape_md(llm_response), streak=stats['streak']),
         reply_markup=get_main_menu_keyboard(),
         parse_mode='Markdown',
     )
@@ -319,7 +312,7 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     body = HISTORY_HEADER.format(count=len(entries))
     for e in entries:
         date_str = to_local(e['created_at'], tz).strftime('%d %b %Y')
-        body += HISTORY_ENTRY.format(date=date_str, score=e['mood_score'], text=_escape_md(e['text'][:200]))
+        body += HISTORY_ENTRY.format(date=date_str, score=e['mood_score'], text=escape_md(e['text'][:200]))
 
     await update.message.reply_text(body, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
     return MAIN_MENU
@@ -340,7 +333,7 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return MAIN_MENU
 
     all_tags = [tag for e in entries for tag in e.get('tags', [])]
-    top_tags = ', '.join(f'#{_escape_md(t)}' for t, _ in Counter(all_tags).most_common(3)) or 'none yet'
+    top_tags = ', '.join(f'#{escape_md(t)}' for t, _ in Counter(all_tags).most_common(3)) or 'none yet'
 
     await update.message.reply_text(
         STATS_MESSAGE.format(
@@ -353,9 +346,6 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         reply_markup=get_main_menu_keyboard(),
     )
     return MAIN_MENU
-
-
-_MIN_ENTRIES_FOR_LLM_SUMMARY = 3
 
 
 async def _user_timezone(telegram_id: int):
@@ -402,12 +392,12 @@ async def show_weekly_summary(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
     all_tags = [tag for e in entries for tag in e.get('tags', [])]
-    top_tags = ', '.join(f'#{_escape_md(t)}' for t, _ in Counter(all_tags).most_common(5)) or 'none yet'
+    top_tags = ', '.join(f'#{escape_md(t)}' for t, _ in Counter(all_tags).most_common(5)) or 'none yet'
     body += WEEKLY_SUMMARY_TAGS.format(tags=top_tags)
 
-    if len(entries) >= _MIN_ENTRIES_FOR_LLM_SUMMARY:
+    if len(entries) >= MIN_ENTRIES_FOR_WEEKLY_SUMMARY:
         body += WEEKLY_SUMMARY_LLM_INTRO
-        body += _escape_md(await asyncio.to_thread(_llm_svc.get_weekly_summary, entries))
+        body += escape_md(await asyncio.to_thread(_llm_svc.get_weekly_summary, entries))
     else:
         body += WEEKLY_SUMMARY_TOO_FEW
 

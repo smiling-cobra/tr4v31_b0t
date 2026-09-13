@@ -8,6 +8,7 @@ from repositories.user_repo import UserRepository
 from services import time_utils
 
 _WEEK_DAYS = 7
+MIN_ENTRIES_FOR_WEEKLY_SUMMARY = 3
 
 
 class JournalService:
