@@ -6,7 +6,7 @@ LLM and DB calls are patched wherever a handler reaches them.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from datetime import datetime
 
@@ -32,33 +32,7 @@ from bot.handlers.journal import (
 from bot.handlers.journal.views import mood_bar
 from messages.strings import GUIDANCE_CRISIS_RESOURCES
 from repositories.user_repo import UserRepository
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _update(text: str, user_id: int = 12345) -> MagicMock:
-    u = MagicMock()
-    u.message.text = text
-    u.message.reply_text = AsyncMock()
-    u.effective_user.id = user_id
-    return u
-
-
-def _location_update(lat: float, lng: float, user_id: int = 12345) -> MagicMock:
-    u = MagicMock()
-    u.message.location.latitude = lat
-    u.message.location.longitude = lng
-    u.message.reply_text = AsyncMock()
-    u.effective_user.id = user_id
-    return u
-
-
-def _context(user_data: dict | None = None) -> MagicMock:
-    c = MagicMock()
-    c.user_data = user_data if user_data is not None else {}
-    return c
+from tests.conftest import make_context as _context, make_location_update as _location_update, make_update as _update
 
 
 def _set_user_timezone(name: str, user_id: int = 12345) -> None:
