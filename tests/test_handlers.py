@@ -6,12 +6,11 @@ LLM and DB calls are patched wherever a handler reaches them.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from datetime import datetime
 
 from bot.handlers.journal import (
-    _mood_bar,
     CHECK_IN_GUIDANCE_OFFER,
     CHECK_IN_MOOD,
     CHECK_IN_TEXT,
@@ -31,35 +30,10 @@ from bot.handlers.journal import (
     show_weekly_summary,
     start,
 )
+from bot.handlers.journal.views import mood_bar
 from messages.strings import GUIDANCE_CRISIS_RESOURCES
 from repositories.user_repo import UserRepository
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _update(text: str, user_id: int = 12345) -> MagicMock:
-    u = MagicMock()
-    u.message.text = text
-    u.message.reply_text = AsyncMock()
-    u.effective_user.id = user_id
-    return u
-
-
-def _location_update(lat: float, lng: float, user_id: int = 12345) -> MagicMock:
-    u = MagicMock()
-    u.message.location.latitude = lat
-    u.message.location.longitude = lng
-    u.message.reply_text = AsyncMock()
-    u.effective_user.id = user_id
-    return u
-
-
-def _context(user_data: dict | None = None) -> MagicMock:
-    c = MagicMock()
-    c.user_data = user_data if user_data is not None else {}
-    return c
+from tests.conftest import make_context as _context, make_location_update as _location_update, make_update as _update
 
 
 def _set_user_timezone(name: str, user_id: int = 12345) -> None:
@@ -69,7 +43,7 @@ def _set_user_timezone(name: str, user_id: int = 12345) -> None:
 async def _history_text(created_at: datetime = datetime(2026, 3, 26, 11, 0)) -> str:
     """Render the history view for a single entry stored at the given UTC instant."""
     update = _update('')
-    with patch('bot.handlers.journal._journal_svc') as mock_svc:
+    with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
         mock_svc.get_recent_entries.return_value = [
             {'mood_score': 5, 'text': 'late night', 'tags': [], 'created_at': created_at}
         ]
@@ -168,14 +142,14 @@ class TestHandleTimezone:
 class TestHandleTimezoneLocation:
     async def test_valid_location_advances_state(self):
         ctx = _context({'name': 'Alice'})
-        with patch('bot.handlers.journal._tf') as mock_tf:
+        with patch('bot.handlers.journal.timezones._tf') as mock_tf:
             mock_tf.timezone_at.return_value = 'Europe/Berlin'
             result = await handle_timezone_location(_location_update(52.52, 13.405), ctx)
         assert result == ONBOARDING_TIME
 
     async def test_valid_location_stores_timezone(self):
         ctx = _context({'name': 'Alice'})
-        with patch('bot.handlers.journal._tf') as mock_tf:
+        with patch('bot.handlers.journal.timezones._tf') as mock_tf:
             mock_tf.timezone_at.return_value = 'Europe/Berlin'
             await handle_timezone_location(_location_update(52.52, 13.405), ctx)
         assert ctx.user_data['timezone'] == 'Europe/Berlin'
@@ -183,7 +157,7 @@ class TestHandleTimezoneLocation:
     async def test_valid_location_removes_keyboard(self):
         from telegram import ReplyKeyboardRemove
         update = _location_update(52.52, 13.405)
-        with patch('bot.handlers.journal._tf') as mock_tf:
+        with patch('bot.handlers.journal.timezones._tf') as mock_tf:
             mock_tf.timezone_at.return_value = 'Europe/Berlin'
             await handle_timezone_location(update, _context({'name': 'Alice'}))
         assert any(
@@ -194,14 +168,14 @@ class TestHandleTimezoneLocation:
     async def test_unresolvable_location_stays_on_timezone(self):
         # timezonefinder returns None for open ocean coordinates
         ctx = _context({'name': 'Alice'})
-        with patch('bot.handlers.journal._tf') as mock_tf:
+        with patch('bot.handlers.journal.timezones._tf') as mock_tf:
             mock_tf.timezone_at.return_value = None
             result = await handle_timezone_location(_location_update(0.0, 0.0), ctx)
         assert result == ONBOARDING_TIMEZONE
 
     async def test_unresolvable_location_does_not_store_timezone(self):
         ctx = _context({'name': 'Alice'})
-        with patch('bot.handlers.journal._tf') as mock_tf:
+        with patch('bot.handlers.journal.timezones._tf') as mock_tf:
             mock_tf.timezone_at.return_value = None
             await handle_timezone_location(_location_update(0.0, 0.0), ctx)
         assert 'timezone' not in ctx.user_data
@@ -216,12 +190,12 @@ class TestHandleReminderTime:
         return _context({'name': 'Alice', 'timezone': 'Europe/London'})
 
     async def test_valid_time_advances_to_main_menu(self):
-        with patch('bot.handlers.journal._user_svc'):
+        with patch('bot.handlers.journal.deps.user_svc'):
             result = await handle_reminder_time(_update('09:00'), self._ctx())
         assert result == MAIN_MENU
 
     async def test_valid_time_saves_user(self):
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             await handle_reminder_time(_update('21:30'), self._ctx())
         mock_svc.create_or_update.assert_called_once()
 
@@ -242,12 +216,12 @@ class TestHandleReminderTime:
         assert result == ONBOARDING_TIME
 
     async def test_boundary_midnight(self):
-        with patch('bot.handlers.journal._user_svc'):
+        with patch('bot.handlers.journal.deps.user_svc'):
             result = await handle_reminder_time(_update('00:00'), self._ctx())
         assert result == MAIN_MENU
 
     async def test_boundary_last_minute_of_day(self):
-        with patch('bot.handlers.journal._user_svc'):
+        with patch('bot.handlers.journal.deps.user_svc'):
             result = await handle_reminder_time(_update('23:59'), self._ctx())
         assert result == MAIN_MENU
 
@@ -306,8 +280,8 @@ class TestHandleEntryTextErrors:
 
     async def test_db_error_returns_main_menu(self):
         ctx = self._ctx()
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc'):
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc'):
             mock_svc.save_entry.side_effect = Exception('DB down')
             result = await handle_entry_text(_update('feeling bad'), ctx)
         assert result == MAIN_MENU
@@ -315,8 +289,8 @@ class TestHandleEntryTextErrors:
     async def test_db_error_sends_error_message(self):
         ctx = self._ctx()
         update = _update('feeling bad')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc'):
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc'):
             mock_svc.save_entry.side_effect = Exception('DB down')
             await handle_entry_text(update, ctx)
         from messages.strings import ERROR_GENERIC
@@ -325,20 +299,20 @@ class TestHandleEntryTextErrors:
 
 class TestShowHistory:
     async def test_empty_history_returns_main_menu(self):
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_recent_entries.return_value = []
             result = await show_history(_update(''), _context())
         assert result == MAIN_MENU
 
     async def test_db_error_returns_main_menu(self):
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_recent_entries.side_effect = Exception('DB down')
             result = await show_history(_update(''), _context())
         assert result == MAIN_MENU
 
     async def test_db_error_sends_error_message(self):
         update = _update('')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_recent_entries.side_effect = Exception('DB down')
             await show_history(update, _context())
         from messages.strings import ERROR_GENERIC
@@ -357,21 +331,21 @@ class TestShowHistory:
 
 class TestShowStats:
     async def test_no_entries_returns_main_menu(self):
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_stats.return_value = {'total': 0, 'streak': 0, 'avg_mood': 0}
             mock_svc.get_recent_entries.return_value = []
             result = await show_stats(_update(''), _context())
         assert result == MAIN_MENU
 
     async def test_db_error_returns_main_menu(self):
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_stats.side_effect = Exception('DB down')
             result = await show_stats(_update(''), _context())
         assert result == MAIN_MENU
 
     async def test_db_error_sends_error_message(self):
         update = _update('')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_stats.side_effect = Exception('DB down')
             await show_stats(update, _context())
         from messages.strings import ERROR_GENERIC
@@ -384,23 +358,23 @@ class TestShowStats:
 
 class TestMoodBar:
     def test_score_0_all_empty(self):
-        assert _mood_bar(0) == '░░░░░░░░░░'
+        assert mood_bar(0) == '░░░░░░░░░░'
 
     def test_score_10_all_filled(self):
-        assert _mood_bar(10) == '▓▓▓▓▓▓▓▓▓▓'
+        assert mood_bar(10) == '▓▓▓▓▓▓▓▓▓▓'
 
     def test_score_5_half_filled(self):
-        assert _mood_bar(5) == '▓▓▓▓▓░░░░░'
+        assert mood_bar(5) == '▓▓▓▓▓░░░░░'
 
     def test_total_length_always_10(self):
         for score in range(0, 11):
-            assert len(_mood_bar(score)) == 10
+            assert len(mood_bar(score)) == 10
 
     def test_clamps_below_zero(self):
-        assert _mood_bar(-1) == '░░░░░░░░░░'
+        assert mood_bar(-1) == '░░░░░░░░░░'
 
     def test_clamps_above_ten(self):
-        assert _mood_bar(11) == '▓▓▓▓▓▓▓▓▓▓'
+        assert mood_bar(11) == '▓▓▓▓▓▓▓▓▓▓'
 
 
 # ---------------------------------------------------------------------------
@@ -418,22 +392,22 @@ def _entry(mood: int, days_ago: int = 0) -> dict:
 
 class TestShowWeeklySummary:
     async def test_no_entries_returns_main_menu(self):
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_weekly_entries.return_value = []
             result = await show_weekly_summary(_update(''), _context())
         assert result == MAIN_MENU
 
     async def test_no_entries_sends_empty_message(self):
         update = _update('')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_weekly_entries.return_value = []
             await show_weekly_summary(update, _context())
         from messages.strings import WEEKLY_SUMMARY_EMPTY
         assert update.message.reply_text.call_args.args[0] == WEEKLY_SUMMARY_EMPTY
 
     async def test_with_entries_returns_main_menu(self):
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(7), _entry(5, 1), _entry(3, 2)]
             mock_llm.get_weekly_summary.return_value = 'A good week overall.'
             result = await show_weekly_summary(_update(''), _context())
@@ -441,8 +415,8 @@ class TestShowWeeklySummary:
 
     async def test_message_contains_mood_scores(self):
         update = _update('')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(7), _entry(5, 1)]
             mock_llm.get_weekly_summary.return_value = 'Summary.'
             await show_weekly_summary(update, _context())
@@ -452,8 +426,8 @@ class TestShowWeeklySummary:
 
     async def test_message_contains_mood_bar(self):
         update = _update('')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(5)]
             mock_llm.get_weekly_summary.return_value = 'Summary.'
             await show_weekly_summary(update, _context())
@@ -461,8 +435,8 @@ class TestShowWeeklySummary:
         assert '▓' in text
 
     async def test_enough_entries_calls_llm_summary(self):
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(7), _entry(5, 1), _entry(3, 2)]
             mock_llm.get_weekly_summary.return_value = 'Summary.'
             await show_weekly_summary(_update(''), _context())
@@ -470,8 +444,8 @@ class TestShowWeeklySummary:
 
     async def test_too_few_entries_skips_llm_summary(self):
         update = _update('')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [_entry(5), _entry(4, 1)]
             await show_weekly_summary(update, _context())
         mock_llm.get_weekly_summary.assert_not_called()
@@ -479,7 +453,7 @@ class TestShowWeeklySummary:
         assert WEEKLY_SUMMARY_TOO_FEW in update.message.reply_text.call_args.args[0]
 
     async def test_db_error_returns_main_menu(self):
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_weekly_entries.side_effect = Exception('DB down')
             result = await show_weekly_summary(_update(''), _context())
         assert result == MAIN_MENU
@@ -488,8 +462,8 @@ class TestShowWeeklySummary:
         # Kiritimati is UTC+14: 11:00 UTC on the 26th is the 27th locally.
         _set_user_timezone('Pacific/Kiritimati')
         update = _update('')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_svc.get_weekly_entries.return_value = [
                 {'mood_score': 5, 'text': 'x', 'tags': [],
                  'created_at': datetime(2026, 3, 26, 11, 0)}
@@ -500,7 +474,7 @@ class TestShowWeeklySummary:
 
     async def test_stored_timezone_is_passed_to_the_query(self):
         _set_user_timezone('Pacific/Kiritimati')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc:
             mock_svc.get_weekly_entries.return_value = []
             await show_weekly_summary(_update(''), _context())
         assert mock_svc.get_weekly_entries.call_args.args[1] == 'Pacific/Kiritimati'
@@ -514,8 +488,8 @@ class TestHandleEntryTextGuidance:
     async def _run(self, mood_score: int) -> tuple:
         ctx = _context({'name': 'Alice', 'mood_score': mood_score})
         update = _update('I feel awful')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_svc.get_stats.return_value = {'streak': 1, 'total': 1, 'avg_mood': mood_score}
             mock_llm.extract_tags.return_value = []
             mock_llm.get_empathetic_response.return_value = 'Hang in there.'
@@ -565,8 +539,8 @@ class TestCrisisResourceDelivery:
     async def _run(self, mood_score: int, svc_error: Exception | None = None) -> MagicMock:
         ctx = _context({'name': 'Alice', 'mood_score': mood_score})
         update = _update('I feel awful')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             if svc_error is not None:
                 mock_llm.extract_tags.side_effect = svc_error
             else:
@@ -617,7 +591,7 @@ class TestPrivacyNotice:
     async def test_new_user_sees_it_before_being_asked_anything(self):
         from messages.strings import PRIVACY_NOTICE
         update = _update('/start')
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             mock_svc.get.return_value = None
             result = await start(update, _context())
         sent = [c.args[0] for c in update.message.reply_text.call_args_list]
@@ -627,7 +601,7 @@ class TestPrivacyNotice:
     async def test_returning_user_is_not_shown_it_again(self):
         from messages.strings import PRIVACY_NOTICE
         update = _update('/start')
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             mock_svc.get.return_value = {'name': 'Alice', 'onboarded': True}
             result = await start(update, _context())
         sent = [c.args[0] for c in update.message.reply_text.call_args_list]
@@ -659,8 +633,8 @@ class TestPrivacyNotice:
 class TestMissingMoodScore:
     async def test_entry_text_re_asks_instead_of_assuming(self):
         update = _update('I feel awful')
-        with patch('bot.handlers.journal._journal_svc') as mock_svc, \
-             patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             result = await handle_entry_text(update, _context({'name': 'Alice'}))
         assert result == CHECK_IN_MOOD
         mock_svc.save_entry.assert_not_called()
@@ -669,8 +643,8 @@ class TestMissingMoodScore:
     async def test_entry_text_tells_the_user_it_was_not_saved(self):
         from messages.strings import MOOD_LOST
         update = _update('I feel awful')
-        with patch('bot.handlers.journal._journal_svc'), \
-             patch('bot.handlers.journal._llm_svc'):
+        with patch('bot.handlers.journal.deps.journal_svc'), \
+             patch('bot.handlers.journal.deps.llm_svc'):
             await handle_entry_text(update, _context({'name': 'Alice'}))
         assert update.message.reply_text.call_args.args[0] == MOOD_LOST
 
@@ -679,7 +653,7 @@ class TestMissingMoodScore:
         score means lost state rather than a well user."""
         from bot.keyboards import GUIDANCE_NO
         update = _update(GUIDANCE_NO)
-        with patch('bot.handlers.journal._llm_svc'):
+        with patch('bot.handlers.journal.deps.llm_svc'):
             result = await handle_guidance_offer(update, _context({'entry_text': 'rough'}))
         sent = [c.args[0] for c in update.message.reply_text.call_args_list]
         assert GUIDANCE_CRISIS_RESOURCES in sent
@@ -696,14 +670,14 @@ class TestHandleGuidanceOffer:
 
     async def test_yes_returns_main_menu(self):
         from bot.keyboards import GUIDANCE_YES
-        with patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try deep breathing.'
             result = await handle_guidance_offer(_update(GUIDANCE_YES), self._ctx())
         assert result == MAIN_MENU
 
     async def test_yes_calls_llm(self):
         from bot.keyboards import GUIDANCE_YES
-        with patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try deep breathing.'
             await handle_guidance_offer(_update(GUIDANCE_YES), self._ctx())
         mock_llm.get_psychological_guidance.assert_called_once_with(3, 'feeling rough')
@@ -715,7 +689,7 @@ class TestHandleGuidanceOffer:
 
     async def test_no_skips_llm(self):
         from bot.keyboards import GUIDANCE_NO
-        with patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             await handle_guidance_offer(_update(GUIDANCE_NO), self._ctx())
         mock_llm.get_psychological_guidance.assert_not_called()
 
@@ -728,7 +702,7 @@ class TestHandleGuidanceOffer:
         before this opt-in is ever offered. See TestCrisisResourceDelivery."""
         from bot.keyboards import GUIDANCE_YES
         update = _update(GUIDANCE_YES)
-        with patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try cold water.'
             await handle_guidance_offer(update, self._ctx(mood_score=2))
         sent = [c.args[0] for c in update.message.reply_text.call_args_list]
@@ -737,7 +711,7 @@ class TestHandleGuidanceOffer:
     async def test_score_3_does_not_append_crisis_resources(self):
         from bot.keyboards import GUIDANCE_YES
         update = _update(GUIDANCE_YES)
-        with patch('bot.handlers.journal._llm_svc') as mock_llm:
+        with patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
             mock_llm.get_psychological_guidance.return_value = 'Try deep breathing.'
             await handle_guidance_offer(update, self._ctx(mood_score=3))
         sent_text = update.message.reply_text.call_args.args[0]
@@ -758,20 +732,20 @@ class TestRecoverState:
         mock_svc.get.return_value = {'telegram_id': 12345, 'name': name, 'onboarded': True}
 
     async def test_unonboarded_user_is_sent_through_onboarding(self):
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             mock_svc.get.return_value = None
             state = await recover_state(_update('hello'), _context())
         assert state == ONBOARDING_NAME
 
     async def test_half_onboarded_user_is_sent_through_onboarding(self):
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             mock_svc.get.return_value = {'telegram_id': 12345, 'name': 'Sam'}
             state = await recover_state(_update('hello'), _context())
         assert state == ONBOARDING_NAME
 
     async def test_onboarded_user_lands_back_on_the_main_menu(self):
         update = _update('some stray text')
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             self._onboarded(mock_svc)
             state = await recover_state(update, _context())
         assert state == MAIN_MENU
@@ -780,7 +754,7 @@ class TestRecoverState:
     async def test_stray_text_still_gets_an_answer(self):
         """handle_main_menu returns silently for unknown text; recovery must not."""
         update = _update('some stray text')
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             self._onboarded(mock_svc)
             await recover_state(update, _context())
         assert update.message.reply_text.called
@@ -790,21 +764,21 @@ class TestRecoverState:
         the button must work on the first tap, not the second."""
         from bot.keyboards import CHECK_IN
         update = _update(CHECK_IN)
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             self._onboarded(mock_svc)
             state = await recover_state(update, _context())
         assert state == CHECK_IN_MOOD
 
     async def test_the_name_is_restored_for_later_handlers(self):
         ctx = _context()
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             self._onboarded(mock_svc)
             await recover_state(_update('hello'), ctx)
         assert ctx.user_data['name'] == 'Sam'
 
     async def test_an_in_memory_name_is_not_overwritten(self):
         ctx = _context({'name': 'Alex'})
-        with patch('bot.handlers.journal._user_svc') as mock_svc:
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
             self._onboarded(mock_svc)
             await recover_state(_update('hello'), ctx)
         assert ctx.user_data['name'] == 'Alex'
@@ -852,3 +826,26 @@ class TestHandlersAreCoroutines:
         journal.register(app)
         commands.register(app)
         assert app.add_handler.call_count == 3
+
+
+# ---------------------------------------------------------------------------
+# Guard — deps must be reached by attribute, never imported by value
+#
+# `patch('bot.handlers.journal.deps.llm_svc')` only reaches a handler that
+# looks up `deps.llm_svc` at call time. A submodule that instead writes
+# `from .deps import llm_svc` captures its own reference at import time, so
+# the patch call succeeds (no AttributeError) but the handler keeps talking
+# to the real service — a silent hole where the test still passes.
+# ---------------------------------------------------------------------------
+
+class TestDepsAreReachedByAttribute:
+    def test_submodules_never_value_import_the_singletons(self):
+        from pathlib import Path
+
+        package_dir = Path(__file__).resolve().parent.parent / 'bot' / 'handlers' / 'journal'
+        for path in package_dir.glob('*.py'):
+            if path.name == 'deps.py':
+                continue  # deps.py's own docstring names the anti-pattern by example
+            src = path.read_text()
+            assert 'from .deps import' not in src, path
+            assert 'from bot.handlers.journal.deps import' not in src, path

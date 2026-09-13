@@ -1,0 +1,82 @@
+import asyncio
+
+from telegram import ReplyKeyboardRemove, Update
+from telegram.ext import ContextTypes, ConversationHandler
+
+from bot.handlers.journal import deps
+from bot.handlers.journal.onboarding import start
+from bot.handlers.journal.states import CHECK_IN_MOOD, MAIN_MENU
+from bot.handlers.journal.views import show_history, show_stats, show_weekly_summary
+from bot.keyboards import (
+    CHECK_IN, HELP, HISTORY, MAIN_MENU_CHOICES, STATS, WEEKLY_SUMMARY,
+    get_main_menu_keyboard, get_mood_keyboard,
+)
+from messages.strings import CANCEL_MESSAGE, CHECK_IN_MOOD_PROMPT, HELP_MESSAGE, MAIN_MENU_MESSAGE
+
+
+def _name(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return context.user_data.get('name', 'there')
+
+
+async def handle_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    choice = update.message.text
+    name = _name(context)
+
+    if choice == CHECK_IN:
+        await update.message.reply_text(
+            CHECK_IN_MOOD_PROMPT.format(name=name),
+            reply_markup=get_mood_keyboard()
+        )
+        return CHECK_IN_MOOD
+
+    if choice == HISTORY:
+        return await show_history(update, context)
+
+    if choice == STATS:
+        return await show_stats(update, context)
+
+    if choice == WEEKLY_SUMMARY:
+        return await show_weekly_summary(update, context)
+
+    if choice == HELP:
+        await update.message.reply_text(HELP_MESSAGE, parse_mode='Markdown')
+        return MAIN_MENU
+
+    return MAIN_MENU
+
+
+async def recover_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entry point for a text message that belongs to no active conversation.
+
+    Reached when persisted state is genuinely gone, but also after a normal
+    `/cancel` or a first-ever message — the three are indistinguishable from
+    here, so this apologises for nothing and simply re-anchors the user.
+    """
+    telegram_id = update.effective_user.id
+    user = await asyncio.to_thread(deps.user_svc.get, telegram_id)
+
+    if not (user and user.get('onboarded')):
+        return await start(update, context)
+
+    # start() would re-fetch the user to learn this; we already have it.
+    context.user_data.setdefault('name', user['name'])
+
+    # A reply keyboard outlives the conversation that sent it, so the message
+    # that landed here is most often a menu tap. Act on it rather than making
+    # them tap the same button twice.
+    if update.message.text in MAIN_MENU_CHOICES:
+        return await handle_main_menu(update, context)
+
+    await update.message.reply_text(
+        MAIN_MENU_MESSAGE.format(name=user['name']),
+        reply_markup=get_main_menu_keyboard(),
+    )
+    return MAIN_MENU
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        CANCEL_MESSAGE.format(name=_name(context)),
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return ConversationHandler.END
