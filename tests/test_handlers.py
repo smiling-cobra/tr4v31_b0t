@@ -423,7 +423,7 @@ class TestShowWeeklySummary:
         assert '7' in text
         assert '5' in text
 
-    async def test_message_containsmood_bar(self):
+    async def test_message_contains_mood_bar(self):
         update = _update('')
         with patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
              patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
