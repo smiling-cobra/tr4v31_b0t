@@ -1,0 +1,15 @@
+"""Service singletons shared by the journal handlers.
+
+Reach services through this module's attributes — `deps.llm_svc.extract_tags(...)`, never
+`from .deps import llm_svc`. A value import binds the real service into the importing module,
+where `patch('bot.handlers.journal.deps.llm_svc')` cannot reach it: the patch succeeds, the
+handler keeps the real object, and the test passes while hitting a live Anthropic client.
+Attribute access keeps one patch point for every handler.
+"""
+from services.journal_service import JournalService
+from services.llm_service import LlmService
+from services.user_service import UserService
+
+user_svc = UserService()
+journal_svc = JournalService()
+llm_svc = LlmService()
