@@ -1,0 +1,97 @@
+"""Telegram conversation handlers for the daily check-in.
+
+Everything here runs on the single asyncio event loop that python-telegram-bot
+v20+ uses, so any blocking call — Anthropic over HTTP, pymongo over the wire —
+would stall every other user for its duration. The services stay synchronous
+(the scheduler calls them too), so each blocking call is handed to a worker
+thread with `asyncio.to_thread` at the call site. That boundary is deliberate
+and visible: if you add a service call here, wrap it.
+
+This module is a thin orchestrator: it owns only the conversation state
+machine and `register()`. Each responsibility lives in its own submodule:
+
+    states.py       conversation-state ints and mood thresholds
+    deps.py         service singletons — reach them as `deps.llm_svc`, etc.
+    errors.py       @service_errors, the shared "fall back to main menu" decorator
+    timezones.py    IANA timezone lookup (exact, fuzzy, and by coordinate)
+    onboarding.py   name, timezone, reminder-time setup
+    menu.py         the main-menu router and /cancel
+    checkin.py      mood rating, entry text, LLM response, guidance offer
+    views.py        history, stats, weekly summary
+"""
+from telegram.ext import Application, CommandHandler, ConversationHandler, MessageHandler, filters
+
+from bot.handlers.journal.checkin import handle_entry_text, handle_guidance_offer, handle_mood
+from bot.handlers.journal.menu import cancel, handle_main_menu
+from bot.handlers.journal.onboarding import (
+    handle_name,
+    handle_reminder_time,
+    handle_timezone,
+    handle_timezone_location,
+    start,
+)
+from bot.handlers.journal.states import (
+    CHECK_IN_GUIDANCE_OFFER,
+    CHECK_IN_MOOD,
+    CHECK_IN_TEXT,
+    MAIN_MENU,
+    ONBOARDING_NAME,
+    ONBOARDING_TIME,
+    ONBOARDING_TIMEZONE,
+)
+from bot.handlers.journal.views import show_history, show_stats, show_weekly_summary
+
+__all__ = [
+    'ONBOARDING_NAME',
+    'ONBOARDING_TIMEZONE',
+    'ONBOARDING_TIME',
+    'MAIN_MENU',
+    'CHECK_IN_MOOD',
+    'CHECK_IN_TEXT',
+    'CHECK_IN_GUIDANCE_OFFER',
+    'start',
+    'handle_name',
+    'handle_timezone',
+    'handle_timezone_location',
+    'handle_reminder_time',
+    'handle_main_menu',
+    'handle_mood',
+    'handle_entry_text',
+    'handle_guidance_offer',
+    'show_history',
+    'show_stats',
+    'show_weekly_summary',
+    'cancel',
+    'register',
+]
+
+
+def register(application: Application) -> None:
+    handler = ConversationHandler(
+        entry_points=[
+            CommandHandler('start', start),
+            CommandHandler('history', show_history),
+            CommandHandler('stats', show_stats),
+            CommandHandler('summary', show_weekly_summary),
+        ],
+        states={
+            ONBOARDING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)],
+            ONBOARDING_TIMEZONE: [
+                MessageHandler(filters.LOCATION, handle_timezone_location),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_timezone),
+            ],
+            ONBOARDING_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_reminder_time)],
+            MAIN_MENU: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_main_menu),
+                CommandHandler('history', show_history),
+                CommandHandler('stats', show_stats),
+                CommandHandler('summary', show_weekly_summary),
+            ],
+            CHECK_IN_MOOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_mood)],
+            CHECK_IN_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_entry_text)],
+            CHECK_IN_GUIDANCE_OFFER: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_guidance_offer)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+        allow_reentry=True,
+    )
+    application.add_handler(handler)

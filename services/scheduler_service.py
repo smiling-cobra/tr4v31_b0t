@@ -5,21 +5,15 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from messages.markdown import escape_md
 from messages.strings import REMINDER_MESSAGE, WEEKLY_SUMMARY_NOTIFICATION
-from services.journal_service import JournalService
+from services.journal_service import JournalService, MIN_ENTRIES_FOR_WEEKLY_SUMMARY
 from services.llm_service import LlmService
 from services.user_service import UserService
 
 logger = logging.getLogger(__name__)
 
 _INTERVAL_SECONDS = 60
-_MIN_ENTRIES_FOR_WEEKLY_SUMMARY = 3
-
-
-def _escape_md(text: str) -> str:
-    for char in ('*', '_', '`', '['):
-        text = text.replace(char, f'\\{char}')
-    return text
 
 
 class SchedulerService:
@@ -55,7 +49,7 @@ class SchedulerService:
                 try:
                     await context.bot.send_message(
                         chat_id=user['telegram_id'],
-                        text=REMINDER_MESSAGE.format(name=_escape_md(user['name'])),
+                        text=REMINDER_MESSAGE.format(name=escape_md(user['name'])),
                         parse_mode='Markdown',
                     )
                     await asyncio.to_thread(
@@ -77,12 +71,12 @@ class SchedulerService:
         entries = await asyncio.to_thread(
             self._journal_svc.get_weekly_entries, user['telegram_id'], user['timezone']
         )
-        if len(entries) < _MIN_ENTRIES_FOR_WEEKLY_SUMMARY:
+        if len(entries) < MIN_ENTRIES_FOR_WEEKLY_SUMMARY:
             return
         summary = await asyncio.to_thread(self._llm_svc.get_weekly_summary, entries)
         await context.bot.send_message(
             chat_id=user['telegram_id'],
-            text=WEEKLY_SUMMARY_NOTIFICATION.format(summary=_escape_md(summary)),
+            text=WEEKLY_SUMMARY_NOTIFICATION.format(summary=escape_md(summary)),
             parse_mode='Markdown',
         )
         await asyncio.to_thread(

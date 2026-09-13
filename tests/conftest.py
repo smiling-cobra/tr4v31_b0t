@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock
+
 import mongomock
 import pytest
 
@@ -16,3 +20,29 @@ def mock_db(monkeypatch):
     monkeypatch.setattr(db_module, '_db', db)
     yield db
     monkeypatch.setattr(db_module, '_db', None)
+
+
+def make_update(text: str, user_id: int = 12345) -> MagicMock:
+    """A mocked Update carrying a text message, for handler tests."""
+    u = MagicMock()
+    u.message.text = text
+    u.message.reply_text = AsyncMock()
+    u.effective_user.id = user_id
+    return u
+
+
+def make_location_update(lat: float, lng: float, user_id: int = 12345) -> MagicMock:
+    """A mocked Update carrying a shared location, for the timezone-detection tests."""
+    u = MagicMock()
+    u.message.location.latitude = lat
+    u.message.location.longitude = lng
+    u.message.reply_text = AsyncMock()
+    u.effective_user.id = user_id
+    return u
+
+
+def make_context(user_data: dict | None = None) -> MagicMock:
+    """A mocked CallbackContext with a plain dict for user_data."""
+    c = MagicMock()
+    c.user_data = user_data if user_data is not None else {}
+    return c
