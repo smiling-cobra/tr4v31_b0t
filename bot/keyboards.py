@@ -7,6 +7,10 @@ WEEKLY_SUMMARY = '📈 Weekly Summary'
 HELP = '❓ Help'
 BACK = '🔙 Back'
 
+# The buttons a main-menu keyboard can produce. A keyboard outlives the
+# conversation that sent it, so a recovered session needs to recognise them.
+MAIN_MENU_CHOICES = (CHECK_IN, HISTORY, STATS, WEEKLY_SUMMARY, HELP)
+
 
 def get_main_menu_keyboard():
     return ReplyKeyboardMarkup(

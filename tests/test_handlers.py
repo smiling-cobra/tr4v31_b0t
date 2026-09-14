@@ -24,6 +24,7 @@ from bot.handlers.journal import (
     handle_reminder_time,
     handle_timezone,
     handle_timezone_location,
+    recover_state,
     show_history,
     show_stats,
     show_weekly_summary,
@@ -718,6 +719,72 @@ class TestHandleGuidanceOffer:
 
 
 # ---------------------------------------------------------------------------
+# Lost conversation state
+#
+# A text message that matches no active conversation. Reached after a restart
+# that outlived the stored state, but also after a plain /cancel or a first-ever
+# message — indistinguishable from inside the handler.
+# ---------------------------------------------------------------------------
+
+class TestRecoverState:
+    @staticmethod
+    def _onboarded(mock_svc, name: str = 'Sam'):
+        mock_svc.get.return_value = {'telegram_id': 12345, 'name': name, 'onboarded': True}
+
+    async def test_unonboarded_user_is_sent_through_onboarding(self):
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
+            mock_svc.get.return_value = None
+            state = await recover_state(_update('hello'), _context())
+        assert state == ONBOARDING_NAME
+
+    async def test_half_onboarded_user_is_sent_through_onboarding(self):
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
+            mock_svc.get.return_value = {'telegram_id': 12345, 'name': 'Sam'}
+            state = await recover_state(_update('hello'), _context())
+        assert state == ONBOARDING_NAME
+
+    async def test_onboarded_user_lands_back_on_the_main_menu(self):
+        update = _update('some stray text')
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
+            self._onboarded(mock_svc)
+            state = await recover_state(update, _context())
+        assert state == MAIN_MENU
+        assert 'Sam' in update.message.reply_text.call_args.args[0]
+
+    async def test_stray_text_still_gets_an_answer(self):
+        """handle_main_menu returns silently for unknown text; recovery must not."""
+        update = _update('some stray text')
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
+            self._onboarded(mock_svc)
+            await recover_state(update, _context())
+        assert update.message.reply_text.called
+
+    async def test_a_stale_menu_tap_is_acted_on_immediately(self):
+        """The keyboard outlives the conversation, so this is the common case:
+        the button must work on the first tap, not the second."""
+        from bot.keyboards import CHECK_IN
+        update = _update(CHECK_IN)
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
+            self._onboarded(mock_svc)
+            state = await recover_state(update, _context())
+        assert state == CHECK_IN_MOOD
+
+    async def test_the_name_is_restored_for_later_handlers(self):
+        ctx = _context()
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
+            self._onboarded(mock_svc)
+            await recover_state(_update('hello'), ctx)
+        assert ctx.user_data['name'] == 'Sam'
+
+    async def test_an_in_memory_name_is_not_overwritten(self):
+        ctx = _context({'name': 'Alex'})
+        with patch('bot.handlers.journal.deps.user_svc') as mock_svc:
+            self._onboarded(mock_svc)
+            await recover_state(_update('hello'), ctx)
+        assert ctx.user_data['name'] == 'Alex'
+
+
+# ---------------------------------------------------------------------------
 # Migration guard — v20+ requires coroutine callbacks
 #
 # A handler that is accidentally left synchronous still registers fine and only
@@ -743,6 +810,7 @@ class TestHandlersAreCoroutines:
             journal.show_weekly_summary,
             journal.handle_guidance_offer,
             journal.cancel,
+            journal.recover_state,
             commands.help_command,
             commands.privacy_command,
         ]

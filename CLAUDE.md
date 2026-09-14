@@ -59,6 +59,7 @@ and the read-only `views.py` (history, stats, weekly summary).
 | `services/` | Business logic — `LlmService`, `UserService`, `JournalService`, `SchedulerService` |
 | `repositories/` | MongoDB data access — `UserRepository`, `EntryRepository`, `StreakRepository` |
 | `db/db.py` | MongoDB connection and collection accessors |
+| `bot/persistence.py` | MongoDB-backed `BasePersistence` — conversation state and an allowlisted slice of `user_data` |
 | `messages/strings.py` | All user-facing message templates |
 | `messages/markdown.py` | `escape_md` — Markdown v1 escaping, shared by `bot/` and `services/` |
 

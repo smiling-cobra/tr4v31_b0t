@@ -15,14 +15,14 @@ machine and `register()`. Each responsibility lives in its own submodule:
     errors.py       @service_errors, the shared "fall back to main menu" decorator
     timezones.py    IANA timezone lookup (exact, fuzzy, and by coordinate)
     onboarding.py   name, timezone, reminder-time setup
-    menu.py         the main-menu router and /cancel
+    menu.py         the main-menu router, /cancel, and lost-state recovery
     checkin.py      mood rating, entry text, LLM response, guidance offer
     views.py        history, stats, weekly summary
 """
 from telegram.ext import Application, CommandHandler, ConversationHandler, MessageHandler, filters
 
 from bot.handlers.journal.checkin import handle_entry_text, handle_guidance_offer, handle_mood
-from bot.handlers.journal.menu import cancel, handle_main_menu
+from bot.handlers.journal.menu import cancel, handle_main_menu, recover_state
 from bot.handlers.journal.onboarding import (
     handle_name,
     handle_reminder_time,
@@ -62,6 +62,7 @@ __all__ = [
     'show_stats',
     'show_weekly_summary',
     'cancel',
+    'recover_state',
     'register',
 ]
 
@@ -73,6 +74,9 @@ def register(application: Application) -> None:
             CommandHandler('history', show_history),
             CommandHandler('stats', show_stats),
             CommandHandler('summary', show_weekly_summary),
+            # Last: only reached when nothing above matched and no conversation
+            # is active, which is exactly the lost-state case.
+            MessageHandler(filters.TEXT & ~filters.COMMAND, recover_state),
         ],
         states={
             ONBOARDING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_name)],
@@ -93,5 +97,9 @@ def register(application: Application) -> None:
         },
         fallbacks=[CommandHandler('cancel', cancel)],
         allow_reentry=True,
+        # Survives a restart or a deploy. `name` is what the persistence layer
+        # keys the stored states by, so changing it orphans live conversations.
+        name='journal',
+        persistent=True,
     )
     application.add_handler(handler)
