@@ -71,6 +71,19 @@ and the read-only `views.py` (history, stats, weekly summary).
 
 **Streak logic** (`JournalService._update_streak`): increments if last check-in was yesterday, resets to 1 if gap > 1 day, no-ops if already checked in today.
 
+**Scheduler** (`SchedulerService`): a 60-second repeating tick decides *who* is due and schedules a
+one-shot `run_once` job per user per task — nothing is sent, and no LLM is called, from the tick
+itself. A user is due for a 30-minute window after their local `reminder_time` (`_DUE_WINDOW_MINUTES`)
+rather than on an exact minute match, so a deploy or reboot cannot silently drop a day's reminder.
+The window means a user stays due for ~30 consecutive ticks, so every send is guarded twice: an
+in-process `_inflight` set covers the gap before the watermark is written, and three per-user date
+watermarks — `last_reminder_sent`, `last_weekly_summary_sent`, `last_weekly_summary_check` — close
+the window for the rest of the local day and survive a restart. `last_weekly_summary_check` exists
+because the "too few entries this week" outcome writes no `_sent` watermark and would otherwise
+re-scan on every tick. A job that raises writes no watermark, so the next tick retries it; the
+window bounds those retries. Unlike `time_utils.resolve_timezone`, an unusable timezone here
+suppresses the send rather than falling back to UTC.
+
 ## Environment Variables (`.env`)
 
 ```
