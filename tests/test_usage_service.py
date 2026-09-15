@@ -143,3 +143,52 @@ class TestStorage:
         svc.consume_llm(99, 1)
         assert UsageRepository().delete_for_user(_USER) == 1
         assert [d['telegram_id'] for d in usage_collection().find()] == [99]
+
+
+class TestMeteringFailures:
+    """A metering outage must not become a user-visible failure.
+
+    `consume_llm` answers "no" instead of raising, which is fail-closed for
+    Anthropic — spend that cannot be metered is not incurred — and leaves every
+    caller on the degradation path it already has written and tested. The
+    alternative is an exception thrown past that path into a generic apology.
+    """
+
+    def test_a_counter_failure_refuses_rather_than_raises(self, svc):
+        with patch.object(svc._repo, 'increment', side_effect=RuntimeError('mongo is down')):
+            assert svc.consume_llm(_USER) is False
+
+    def test_a_timezone_lookup_failure_refuses_rather_than_raises(self, svc):
+        """The day key needs the user record, which is a second thing that can fail."""
+        with patch.object(svc._users, 'find', side_effect=RuntimeError('mongo is down')):
+            assert svc.consume_llm(_USER) is False
+
+    def test_the_failure_is_logged(self, svc, caplog):
+        with patch.object(svc._repo, 'increment', side_effect=RuntimeError('mongo is down')):
+            svc.consume_llm(_USER)
+        assert 'meter' in caplog.text.lower()
+
+    def test_a_refund_failure_is_swallowed(self, svc):
+        """Callers reach `refund` while already handling an error; raising there
+        would replace their failure with a less useful one."""
+        with patch.object(svc._repo, 'increment', side_effect=RuntimeError('mongo is down')):
+            svc.refund(_USER, 1)  # must not raise
+
+
+class TestRefund:
+    def test_a_refund_returns_the_call_to_the_budget(self, svc):
+        svc.consume_llm(_USER, 2)
+        svc.refund(_USER, 1)
+        assert svc.used_today(_USER) == 1
+
+    def test_a_refunded_call_can_be_spent_again(self, svc):
+        svc.consume_llm(_USER, DAILY_LLM_CALL_BUDGET)
+        svc.refund(_USER, 1)
+        assert svc.consume_llm(_USER, 1) is True
+
+    def test_a_refund_uses_the_same_day_key_as_the_reservation(self, svc):
+        """Keyed differently, a refund would credit a day the user never spent."""
+        with _at(datetime(2026, 3, 26, 23, 0, tzinfo=timezone.utc)):
+            svc.consume_llm(_USER, 2, 'Europe/London')
+            svc.refund(_USER, 1, 'Europe/London')
+            assert svc.used_today(_USER, 'Europe/London') == 1

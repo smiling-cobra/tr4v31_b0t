@@ -98,18 +98,28 @@ any mood score.
 
 **Instrumentation** (`AnalyticsService`): one append-only `events` collection, event names defined as
 constants at the top of `services/analytics_service.py`. Two rules: tracking **never raises** (a failed
-insert must not cost a user their check-in) and events **never carry entry text** — props are scalars and
-closed-vocabulary labels, and `_scrub` drops any string long enough to be prose, so a call site that
-passes the wrong variable loses the event rather than leaking the entry. A TTL index expires events
-after `EVENT_RETENTION_DAYS`.
+insert must not cost a user their check-in) and events **never carry entry text**. What upholds the
+second rule is the call sites: every prop is a scalar or a closed-vocabulary label. `_scrub` is a
+backstop beneath them, not the guarantee — it drops over-long strings wherever they sit, including
+inside lists and dicts, which catches `text=` passed where `text_length=` was meant, but cannot catch
+a three-word entry. Adding a prop means checking it by eye. A TTL index expires events after
+`EVENT_RETENTION_DAYS`.
 
 **LLM spend ceiling** (`UsageService`): `DAILY_LLM_CALL_BUDGET` Anthropic calls per user per local day,
-reserved *before* the work so overlapping requests cannot both pass the check, and handed back when
-refused so the counter stays a true record of calls made. `UsageService` resolves the user's timezone
-itself rather than taking it as an argument — if one surface keyed the day on UTC and another on local
-time, a user would hold two counters across midnight and get twice the budget. Every call site degrades
-rather than refusing: the entry is still saved, the mood trend still renders, and the guidance path
-falls back to a fixed grounding exercise.
+reserved *before* the work so overlapping requests cannot both pass the check, and handed back via
+`refund` when refused or when reserved work never ran, so the counter stays close to a record of calls
+actually made. `UsageService` resolves the user's timezone itself rather than taking it as an argument —
+if one surface keyed the day on UTC and another on local time, a user would hold two counters across
+midnight and get twice the budget. `consume_llm` **never raises**: a metering outage answers "no", which
+is fail-closed for Anthropic (spend that cannot be metered is not incurred) and leaves every caller on
+its normal degradation path, which is open for the user — the entry is still saved, the mood trend still
+renders, and the guidance path falls back to a fixed grounding exercise.
+
+**Conversation state ints are an on-disk format.** `MongoPersistence` writes the raw value into
+`ptb_conversations`, so a new state in `states.py` may only be *appended*. Inserting one in the middle
+silently reinterprets every stored row after it — on the deploy that ships the change, a user resting on
+the main menu comes back as mid-onboarding. `tests/test_states.py` pins the values so this fails CI
+instead of production.
 
 **PII surfaces** (for the `/delete` fan-out that Phase 5 owes): `users`, `entries`, `streaks`,
 `notifications`, `ptb_conversations`, `ptb_user_data`, and now `events` and `usage`. `EventRepository`

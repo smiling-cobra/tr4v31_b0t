@@ -144,6 +144,13 @@ async def handle_entry_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
     except Exception:
         logger.exception('Check-in failed for user %s', telegram_id)
+        # Two calls were reserved; the save sits between them, so a database
+        # failure here means the reply was never requested. Hand that one back —
+        # otherwise a run of failures walks the user toward a ceiling on work
+        # that never reached Anthropic. The tag call is not refunded: by this
+        # point it has already been made.
+        if llm_allowed:
+            await asyncio.to_thread(deps.usage_svc.refund, telegram_id, 1)
         await asyncio.to_thread(
             deps.analytics_svc.track, analytics.CHECK_IN_FAILED, telegram_id, mood_score=mood_score
         )

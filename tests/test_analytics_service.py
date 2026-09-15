@@ -159,3 +159,79 @@ class TestTaxonomy:
             if key.isupper() and isinstance(value, str) and not key.startswith('_')
         ]
         assert len(names) == len(set(names))
+
+
+class TestNestedPropScrubbing:
+    """`triggers` and `categories` are lists, so the guard has to look inside them.
+
+    A cap applied only to top-level strings would wave through the same prose one
+    layer down, which is exactly where the call sites in this codebase put their
+    string props.
+    """
+
+    def test_prose_inside_a_list_is_dropped(self):
+        AnalyticsService().track(analytics.CRISIS_RESOURCES_SHOWN, 42, categories=['x' * 500])
+        assert _events()[0]['props'] == {}
+
+    def test_a_list_keeps_its_labels_and_loses_only_the_prose(self):
+        AnalyticsService().track(
+            analytics.CRISIS_RESOURCES_SHOWN, 42, categories=['self_harm', 'y' * 500]
+        )
+        assert _events()[0]['props'] == {'categories': ['self_harm']}
+
+    def test_prose_inside_a_dict_is_dropped(self):
+        AnalyticsService().track(analytics.CHECK_IN_COMPLETED, 42, detail={'text': 'x' * 500})
+        assert _events()[0]['props'] == {}
+
+    def test_a_dict_keeps_its_scalars(self):
+        AnalyticsService().track(
+            analytics.CHECK_IN_COMPLETED, 42, detail={'text': 'x' * 500, 'mood_score': 3}
+        )
+        assert _events()[0]['props'] == {'detail': {'mood_score': 3}}
+
+    def test_an_empty_container_is_preserved(self):
+        """`categories: []` means "nothing matched" and has to survive as itself —
+        it is only dropped when scrubbing is what emptied it."""
+        AnalyticsService().track(analytics.CRISIS_RESOURCES_SHOWN, 42, categories=[])
+        assert _events()[0]['props'] == {'categories': []}
+
+    def test_a_tuple_is_stored_as_a_list(self):
+        """`detect_crisis` returns a tuple; BSON has no tuple type."""
+        AnalyticsService().track(analytics.CRISIS_RESOURCES_SHOWN, 42, categories=('self_harm',))
+        assert _events()[0]['props'] == {'categories': ['self_harm']}
+
+
+class TestWhatTheGuardCannotDo:
+    def test_a_short_entry_is_not_caught(self):
+        """Recorded deliberately: nothing about the length of a terse entry
+        distinguishes it from a label, so `_scrub` cannot be the guarantee that
+        events carry no entry text. The call sites are — this is the net under
+        them. If this test ever needs changing, the fix is a prop allowlist, not
+        a smaller cap.
+        """
+        AnalyticsService().track(analytics.CHECK_IN_COMPLETED, 42, text='I feel awful')
+        assert _events()[0]['props'] == {'text': 'I feel awful'}
+
+    def test_no_call_site_passes_free_text_today(self):
+        """The invariant the guard cannot enforce, asserted where it is upheld:
+        every prop in the taxonomy is a scalar or a closed-vocabulary label."""
+        import ast
+        import pathlib
+
+        offenders = []
+        for path in pathlib.Path('.').glob('**/*.py'):
+            if 'tests' in path.parts or '.venv' in path.parts:
+                continue
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                target = node.func.attr if isinstance(node.func, ast.Attribute) else None
+                if target != 'track':
+                    continue
+                for kw in node.keywords:
+                    # A prop built from the entry text itself. `len(text)` is
+                    # fine; `text` is not.
+                    if isinstance(kw.value, ast.Name) and kw.value.id in ('text', 'entry_text'):
+                        offenders.append(f'{path}: {kw.arg}={kw.value.id}')
+        assert offenders == []

@@ -1297,3 +1297,138 @@ class TestInstrumentation:
         assert tracked['history_viewed']['count'] == 0
         assert tracked['stats_viewed']['total'] == 0
         assert tracked['weekly_summary_viewed']['entry_count'] == 0
+
+
+# ---------------------------------------------------------------------------
+# Metering outages
+# ---------------------------------------------------------------------------
+
+def _metering_down():
+    """A usage repository that cannot be reached.
+
+    Patched at the repository rather than at `consume_llm`, so the real
+    `UsageService` sits in the path and these tests prove the whole chain
+    degrades — not just that the handlers cope with a `False` someone handed
+    them.
+    """
+    return patch(
+        'repositories.usage_repo.UsageRepository.increment',
+        side_effect=RuntimeError('mongo is down'),
+    )
+
+
+class TestCheckInWhenMeteringIsDown:
+    async def _run(self, text: str = 'A quiet day') -> tuple:
+        ctx = _context({'name': 'Alice', 'mood_score': 6})
+        update = _update(text)
+        with _metering_down(), \
+             patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
+            mock_svc.get_stats.return_value = {'streak': 4, 'total': 9, 'avg_mood': 6}
+            result = await handle_entry_text(update, ctx)
+        return result, update, mock_svc, mock_llm
+
+    async def test_the_entry_is_still_saved(self):
+        """The failure is in the meter, not in the thing the user came to do."""
+        _, _, mock_svc, _ = await self._run()
+        mock_svc.save_entry.assert_called_once()
+
+    async def test_no_anthropic_call_is_made(self):
+        """Fail closed on spend: unmetered calls are not made."""
+        _, _, _, mock_llm = await self._run()
+        mock_llm.extract_tags.assert_not_called()
+        mock_llm.get_empathetic_response.assert_not_called()
+
+    async def test_the_user_reaches_the_main_menu(self):
+        result, _, _, _ = await self._run()
+        assert result == MAIN_MENU
+
+    async def test_crisis_resources_still_reach_a_user_who_needs_them(self):
+        """Nothing about a broken counter may stand between this text and the numbers."""
+        ctx = _context({'name': 'Alice', 'mood_score': 6})
+        update = _update('I want to die')
+        with _metering_down(), \
+             patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc'):
+            mock_svc.get_stats.return_value = {'streak': 1, 'total': 1, 'avg_mood': 6}
+            await handle_entry_text(update, ctx)
+        assert GUIDANCE_CRISIS_RESOURCES in [c.args[0] for c in update.message.reply_text.call_args_list]
+
+
+class TestGuidanceWhenMeteringIsDown:
+    async def test_a_real_exercise_is_sent_not_an_apology(self):
+        """This user tapped "yes, help me". A metering outage is not their problem."""
+        from bot.keyboards import GUIDANCE_YES
+        from messages.strings import GUIDANCE_STATIC_FALLBACK
+        ctx = _context({'name': 'Alice', 'mood_score': 2, 'entry_text': 'awful', 'acute': True})
+        update = _update(GUIDANCE_YES)
+        with _metering_down(), patch('bot.handlers.journal.deps.llm_svc'):
+            await handle_guidance_offer(update, ctx)
+        assert update.message.reply_text.call_args.args[0] == GUIDANCE_STATIC_FALLBACK
+
+
+class TestWeeklySummaryWhenMeteringIsDown:
+    async def test_the_locally_computed_trend_still_renders(self):
+        """Only the closing paragraph costs a call; the rows above it are free."""
+        _set_user_timezone('Europe/London')
+        update = _update('')
+        entries = [
+            {'created_at': datetime(2026, 3, 24, 9, 0), 'mood_score': 5, 'text': 'a', 'tags': ['work']},
+            {'created_at': datetime(2026, 3, 25, 9, 0), 'mood_score': 6, 'text': 'b', 'tags': ['work']},
+            {'created_at': datetime(2026, 3, 26, 9, 0), 'mood_score': 7, 'text': 'c', 'tags': []},
+        ]
+        with _metering_down(), \
+             patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc'):
+            mock_svc.get_weekly_entries.return_value = entries
+            await show_weekly_summary(update, _context())
+        body = update.message.reply_text.call_args.args[0]
+        assert '#work' in body
+        assert mood_bar(7) in body
+
+
+class TestFailedCheckInRefundsTheUnspentCall:
+    """Two calls are reserved, and the save sits between them.
+
+    A database failure means the reply was never requested, so charging for it
+    walks a user toward a ceiling on work that never reached Anthropic. The tag
+    call is not refunded — by that point it has been made.
+    """
+
+    async def _run_failing_check_in(self) -> MagicMock:
+        ctx = _context({'name': 'Alice', 'mood_score': 6})
+        with patch('bot.handlers.journal.deps.usage_svc') as usage, \
+             patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc'):
+            usage.consume_llm.return_value = True
+            mock_svc.save_entry.side_effect = RuntimeError('mongo is down')
+            await handle_entry_text(_update('A quiet day'), ctx)
+        return usage
+
+    async def test_exactly_one_call_is_handed_back(self):
+        usage = await self._run_failing_check_in()
+        usage.refund.assert_called_once()
+        assert usage.refund.call_args.args[1] == 1
+
+    async def test_nothing_is_refunded_when_nothing_was_reserved(self):
+        """A user already at the ceiling spent nothing, so there is nothing to return."""
+        ctx = _context({'name': 'Alice', 'mood_score': 6})
+        with patch('bot.handlers.journal.deps.usage_svc') as usage, \
+             patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc'):
+            usage.consume_llm.return_value = False
+            mock_svc.save_entry.side_effect = RuntimeError('mongo is down')
+            await handle_entry_text(_update('A quiet day'), ctx)
+        usage.refund.assert_not_called()
+
+    async def test_a_successful_check_in_refunds_nothing(self):
+        ctx = _context({'name': 'Alice', 'mood_score': 6})
+        with patch('bot.handlers.journal.deps.usage_svc') as usage, \
+             patch('bot.handlers.journal.deps.journal_svc') as mock_svc, \
+             patch('bot.handlers.journal.deps.llm_svc') as mock_llm:
+            usage.consume_llm.return_value = True
+            mock_llm.extract_tags.return_value = ['work']
+            mock_llm.get_empathetic_response.return_value = 'That sounds hard.'
+            mock_svc.get_stats.return_value = {'streak': 1, 'total': 1, 'avg_mood': 6}
+            await handle_entry_text(_update('A quiet day'), ctx)
+        usage.refund.assert_not_called()
